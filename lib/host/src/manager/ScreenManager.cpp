@@ -75,6 +75,18 @@ bool ScreenManager::sendBatch(const SetBatch& batch) {
     return sendBatchByMode(batch);
 }
 
+bool ScreenManager::requestDeviceInfo(uint32_t requestId) {
+    return sendRequestDeviceInfoByMode(requestId);
+}
+
+bool ScreenManager::requestCurrentPage(uint32_t requestId) {
+    return sendRequestCurrentPageByMode(requestId);
+}
+
+bool ScreenManager::requestPageState(uint32_t pageId, uint32_t requestId) {
+    return sendRequestPageStateByMode(pageId, requestId);
+}
+
 void ScreenManager::onEndpointEvent(const Envelope& env, const ScreenEventContext& ctx, void* userData) {
     ScreenManager* self = static_cast<ScreenManager*>(userData);
     if (self == nullptr) {
@@ -185,6 +197,51 @@ bool ScreenManager::sendBatchByMode(const SetBatch& batch) {
             // При mirror это может дать частичную доставку на одном из endpoint.
             const bool okPhysical = _physical.sendBatch(batch);
             const bool okWeb = _web.sendBatch(batch);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
+bool ScreenManager::sendRequestDeviceInfoByMode(uint32_t requestId) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.requestDeviceInfo(requestId);
+        case MirrorMode::WebOnly:
+            return _web.requestDeviceInfo(requestId);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.requestDeviceInfo(requestId);
+            const bool okWeb = _web.requestDeviceInfo(requestId);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
+bool ScreenManager::sendRequestCurrentPageByMode(uint32_t requestId) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.requestCurrentPage(requestId);
+        case MirrorMode::WebOnly:
+            return _web.requestCurrentPage(requestId);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.requestCurrentPage(requestId);
+            const bool okWeb = _web.requestCurrentPage(requestId);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
+bool ScreenManager::sendRequestPageStateByMode(uint32_t pageId, uint32_t requestId) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.requestPageState(pageId, requestId);
+        case MirrorMode::WebOnly:
+            return _web.requestPageState(pageId, requestId);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.requestPageState(pageId, requestId);
+            const bool okWeb = _web.requestPageState(pageId, requestId);
             return okPhysical || okWeb;
         }
     }

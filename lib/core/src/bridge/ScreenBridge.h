@@ -58,6 +58,19 @@ public:
     // Это не "только oversized fallback", а общий fallback-режим.
     bool sendBatch(const SetBatch& batch);
 
+    // Service helper-методы.
+    bool sendHello(const DeviceInfo& deviceInfo);
+    bool requestDeviceInfo(uint32_t requestId = 0);
+    bool requestCurrentPage(uint32_t requestId = 0);
+    bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
+    // page_id опционален: 0 означает "контекстная/текущая страница".
+    bool requestElementState(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0);
+
+    bool sendDeviceInfo(const DeviceInfo& deviceInfo);
+    bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
+    bool sendPageState(const PageState& pageState);
+    bool sendElementState(const ElementState& elementState);
+
 private:
     // Размер порции чтения из транспорта за один read().
     static constexpr size_t kReadChunkSize = 256;

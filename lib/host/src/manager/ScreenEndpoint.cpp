@@ -49,6 +49,18 @@ bool ScreenEndpoint::sendBatch(const SetBatch& batch) {
     return canUseBridge() && _bridge->sendBatch(batch);
 }
 
+bool ScreenEndpoint::requestDeviceInfo(uint32_t requestId) {
+    return canUseBridge() && _bridge->requestDeviceInfo(requestId);
+}
+
+bool ScreenEndpoint::requestCurrentPage(uint32_t requestId) {
+    return canUseBridge() && _bridge->requestCurrentPage(requestId);
+}
+
+bool ScreenEndpoint::requestPageState(uint32_t pageId, uint32_t requestId) {
+    return canUseBridge() && _bridge->requestPageState(pageId, requestId);
+}
+
 bool ScreenEndpoint::canUseBridge() const {
     return _enabled && _bridge != nullptr;
 }
@@ -73,4 +85,3 @@ void ScreenEndpoint::onBridgeEnvelope(const Envelope& env, void* userData) {
 }
 
 }  // namespace screenlib
-

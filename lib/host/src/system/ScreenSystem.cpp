@@ -91,6 +91,18 @@ bool ScreenSystem::sendBatch(const SetBatch& batch) {
     return _manager.sendBatch(batch);
 }
 
+bool ScreenSystem::requestDeviceInfo(uint32_t requestId) {
+    return _manager.requestDeviceInfo(requestId);
+}
+
+bool ScreenSystem::requestCurrentPage(uint32_t requestId) {
+    return _manager.requestCurrentPage(requestId);
+}
+
+bool ScreenSystem::requestPageState(uint32_t pageId, uint32_t requestId) {
+    return _manager.requestPageState(pageId, requestId);
+}
+
 bool ScreenSystem::initWithError(const ScreenConfig& cfg, char* errBuf, size_t errBufSize) {
     _cfg = cfg;
     _initialized = false;

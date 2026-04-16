@@ -113,6 +113,74 @@ bool ScreenBridge::sendBatch(const SetBatch& batch) {
     return sendBatchSplit(safeBatch);
 }
 
+bool ScreenBridge::sendHello(const DeviceInfo& deviceInfo) {
+    Envelope env{};
+    env.which_payload = Envelope_hello_tag;
+    env.payload.hello.has_device_info = true;
+    env.payload.hello.device_info = deviceInfo;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::requestDeviceInfo(uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_request_device_info_tag;
+    env.payload.request_device_info.request_id = requestId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::requestCurrentPage(uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_request_current_page_tag;
+    env.payload.request_current_page.request_id = requestId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::requestPageState(uint32_t pageId, uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_request_page_state_tag;
+    env.payload.request_page_state.request_id = requestId;
+    env.payload.request_page_state.page_id = pageId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::requestElementState(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_request_element_state_tag;
+    env.payload.request_element_state.request_id = requestId;
+    env.payload.request_element_state.page_id = pageId;
+    env.payload.request_element_state.element_id = elementId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::sendDeviceInfo(const DeviceInfo& deviceInfo) {
+    Envelope env{};
+    env.which_payload = Envelope_device_info_tag;
+    env.payload.device_info = deviceInfo;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_current_page_tag;
+    env.payload.current_page.request_id = requestId;
+    env.payload.current_page.page_id = pageId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::sendPageState(const PageState& pageState) {
+    Envelope env{};
+    env.which_payload = Envelope_page_state_tag;
+    env.payload.page_state = pageState;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::sendElementState(const ElementState& elementState) {
+    Envelope env{};
+    env.which_payload = Envelope_element_state_tag;
+    env.payload.element_state = elementState;
+    return sendEnvelope(env);
+}
+
 bool ScreenBridge::sendFramePayload(const uint8_t* payload, size_t payloadLen) {
     if (payload == nullptr || payloadLen == 0) {
         return false;

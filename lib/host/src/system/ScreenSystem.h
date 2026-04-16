@@ -47,6 +47,9 @@ public:
     bool setVisible(uint32_t elementId, bool visible);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
+    bool requestDeviceInfo(uint32_t requestId = 0);
+    bool requestCurrentPage(uint32_t requestId = 0);
+    bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
 
 private:
     ScreenConfig _cfg{};

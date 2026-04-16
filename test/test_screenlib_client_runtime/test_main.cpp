@@ -497,6 +497,62 @@ void test_screen_client_init_is_idempotent() {
     TEST_ASSERT_NOT_NULL(adapter.currentSink());
 }
 
+void test_screen_client_service_helpers_send_responses() {
+    MockTransport transport;
+    screenlib::client::ScreenClient client(transport);
+    client.init();
+
+    DeviceInfo info = DeviceInfo_init_zero;
+    info.protocol_version = 1;
+    strncpy(info.fw_version, "fw-1", sizeof(info.fw_version) - 1);
+    info.fw_version[sizeof(info.fw_version) - 1] = '\0';
+    strncpy(info.ui_version, "ui-1", sizeof(info.ui_version) - 1);
+    info.ui_version[sizeof(info.ui_version) - 1] = '\0';
+
+    TEST_ASSERT_TRUE(client.sendHello(info));
+    TEST_ASSERT_TRUE(client.sendCurrentPage(12, 401));
+
+    PageState pageState = PageState_init_zero;
+    pageState.request_id = 402;
+    pageState.page_id = 12;
+    pageState.elements_count = 1;
+    pageState.elements[0].element_id = 500;
+    pageState.elements[0].type = ElementStateType_ELEMENT_STATE_INT;
+    pageState.elements[0].which_value = PageElementState_int_value_tag;
+    pageState.elements[0].value.int_value = 77;
+    TEST_ASSERT_TRUE(client.sendPageState(pageState));
+
+    ElementState elementState = ElementState_init_zero;
+    elementState.request_id = 403;
+    elementState.page_id = 12;
+    elementState.found = true;
+    elementState.has_element = true;
+    elementState.element = pageState.elements[0];
+    TEST_ASSERT_TRUE(client.sendElementState(elementState));
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_hello_tag, out[0].which_payload);
+    TEST_ASSERT_TRUE(out[0].payload.hello.has_device_info);
+    TEST_ASSERT_EQUAL_UINT32(1, out[0].payload.hello.device_info.protocol_version);
+    TEST_ASSERT_EQUAL_STRING("fw-1", out[0].payload.hello.device_info.fw_version);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_current_page_tag, out[1].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(401, out[1].payload.current_page.request_id);
+    TEST_ASSERT_EQUAL_UINT32(12, out[1].payload.current_page.page_id);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_page_state_tag, out[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(402, out[2].payload.page_state.request_id);
+    TEST_ASSERT_EQUAL_UINT32(12, out[2].payload.page_state.page_id);
+    TEST_ASSERT_EQUAL_UINT8(1, out[2].payload.page_state.elements_count);
+    TEST_ASSERT_EQUAL_UINT32(500, out[2].payload.page_state.elements[0].element_id);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_element_state_tag, out[3].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(403, out[3].payload.element_state.request_id);
+    TEST_ASSERT_TRUE(out[3].payload.element_state.has_element);
+}
+
 }  // namespace
 
 void run_all_tests() {
@@ -510,6 +566,7 @@ void run_all_tests() {
     RUN_TEST(test_screen_client_rejects_non_event_outbound_envelope_from_adapter);
     RUN_TEST(test_screen_client_incoming_non_screen_envelope_does_not_touch_ui);
     RUN_TEST(test_screen_client_init_is_idempotent);
+    RUN_TEST(test_screen_client_service_helpers_send_responses);
 }
 
 #ifdef ARDUINO

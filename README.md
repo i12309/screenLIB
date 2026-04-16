@@ -85,6 +85,27 @@ ITransport -> ScreenClient -> IUiAdapter
 - backend — источник истины для динамического UI состояния (обычная работа остается push-driven).
 - screen client — источник metadata и локального состояния страницы по запросу (service layer).
 
+Пример service usage (backend -> screen -> backend):
+
+```cpp
+// Host side:
+screens.requestCurrentPage(/*requestId=*/1001);
+
+// В event handler придет Envelope_current_page_tag с page_id и request_id.
+```
+
+Пример handshake hello/device_info (screen side):
+
+```cpp
+DeviceInfo info = DeviceInfo_init_zero;
+info.protocol_version = 1;
+strncpy(info.fw_version, "1.0.0", sizeof(info.fw_version) - 1);
+strncpy(info.ui_version, "ui-2026-04", sizeof(info.ui_version) - 1);
+strncpy(info.client_type, "esp32-screen", sizeof(info.client_type) - 1);
+
+screenClient.sendHello(info);
+```
+
 ## EezLvglAdapter
 
 `EezLvglAdapter` — первый concrete `IUiAdapter` для EEZ/LVGL.

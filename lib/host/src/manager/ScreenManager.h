@@ -44,6 +44,9 @@ public:
     bool setVisible(uint32_t elementId, bool visible);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
+    bool requestDeviceInfo(uint32_t requestId = 0);
+    bool requestCurrentPage(uint32_t requestId = 0);
+    bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
 
 private:
     ScreenConfig _cfg{};
@@ -70,6 +73,9 @@ private:
     bool sendSetVisibleByMode(uint32_t elementId, bool visible);
     bool sendHeartbeatByMode(uint32_t uptimeMs);
     bool sendBatchByMode(const SetBatch& batch);
+    bool sendRequestDeviceInfoByMode(uint32_t requestId);
+    bool sendRequestCurrentPageByMode(uint32_t requestId);
+    bool sendRequestPageStateByMode(uint32_t pageId, uint32_t requestId);
 };
 
 }  // namespace screenlib

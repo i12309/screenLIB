@@ -46,6 +46,12 @@ public:
     bool sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value);
     bool sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text);
 
+    // Service response/helper методы экранной стороны.
+    bool sendHello(const DeviceInfo& deviceInfo);
+    bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
+    bool sendPageState(const PageState& pageState);
+    bool sendElementState(const ElementState& elementState);
+
 private:
     // Размер внутренней очереди событий UI -> controller.
     static constexpr size_t kUiEventQueueSize = 8;

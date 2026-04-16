@@ -103,6 +103,22 @@ bool ScreenClient::sendInputEventString(uint32_t elementId, uint32_t pageId, con
     return sendOutgoingEnvelope(env);
 }
 
+bool ScreenClient::sendHello(const DeviceInfo& deviceInfo) {
+    return _bridge.sendHello(deviceInfo);
+}
+
+bool ScreenClient::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
+    return _bridge.sendCurrentPage(pageId, requestId);
+}
+
+bool ScreenClient::sendPageState(const PageState& pageState) {
+    return _bridge.sendPageState(pageState);
+}
+
+bool ScreenClient::sendElementState(const ElementState& elementState) {
+    return _bridge.sendElementState(elementState);
+}
+
 void ScreenClient::onBridgeEnvelopeStatic(const Envelope& env, void* userData) {
     ScreenClient* self = static_cast<ScreenClient*>(userData);
     if (self != nullptr) {
