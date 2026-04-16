@@ -63,6 +63,10 @@ void ScreenSystem::setEventHandler(EventHandler handler, void* userData) {
     _manager.setEventHandler(handler, userData);
 }
 
+void ScreenSystem::setPageRegistry(PageRegistry* registry) {
+    _manager.setPageRegistry(registry);
+}
+
 bool ScreenSystem::showPage(uint32_t pageId) {
     return _manager.showPage(pageId);
 }

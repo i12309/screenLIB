@@ -73,6 +73,10 @@ void ScreenManager::onEndpointEvent(const Envelope& env, const ScreenEventContex
 }
 
 void ScreenManager::handleEndpointEvent(const Envelope& env, const ScreenEventContext& ctx) {
+    if (_pageRegistry != nullptr) {
+        _pageRegistry->dispatchEnvelope(env, ctx);
+    }
+
     // Важно: callback также вызывается синхронно из tick().
     if (_eventHandler != nullptr) {
         _eventHandler(env, ctx, _eventUser);
@@ -177,4 +181,3 @@ bool ScreenManager::sendBatchByMode(const SetBatch& batch) {
 }
 
 }  // namespace screenlib
-

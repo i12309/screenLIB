@@ -6,6 +6,7 @@
 #include "config/ScreenConfig.h"
 #include "frame/FrameCodec.h"
 #include "manager/ScreenManager.h"
+#include "pages/PageRegistry.h"
 #include "proto/ProtoCodec.h"
 #include "screen/ScreenBridge.h"
 
@@ -174,6 +175,117 @@ void test_screen_manager_receives_incoming_events_with_context() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_button_event_tag, gCaptured.tag);
 }
 
+class TestPageController : public screenlib::IPageController {
+public:
+    explicit TestPageController(uint32_t id) : _id(id) {}
+
+    uint32_t pageId() const override { return _id; }
+
+    void onEnter() override { enterCount++; }
+    void onLeave() override { leaveCount++; }
+
+    bool onEnvelope(const Envelope& env, const screenlib::ScreenEventContext& ctx) override {
+        envelopeCount++;
+        lastTag = env.which_payload;
+        lastCtx = ctx;
+        return true;
+    }
+
+    int enterCount = 0;
+    int leaveCount = 0;
+    int envelopeCount = 0;
+    pb_size_t lastTag = 0;
+    screenlib::ScreenEventContext lastCtx{};
+
+private:
+    uint32_t _id = 0;
+};
+
+void test_page_registry_switch_calls_enter_leave() {
+    screenlib::PageRegistry registry;
+    TestPageController page1(1);
+    TestPageController page2(2);
+
+    TEST_ASSERT_TRUE(registry.registerPage(&page1));
+    TEST_ASSERT_TRUE(registry.registerPage(&page2));
+    TEST_ASSERT_EQUAL_UINT32(0, registry.currentPage());
+
+    TEST_ASSERT_TRUE(registry.setCurrentPage(1));
+    TEST_ASSERT_EQUAL_UINT32(1, registry.currentPage());
+    TEST_ASSERT_EQUAL_INT(1, page1.enterCount);
+    TEST_ASSERT_EQUAL_INT(0, page1.leaveCount);
+
+    TEST_ASSERT_TRUE(registry.setCurrentPage(2));
+    TEST_ASSERT_EQUAL_UINT32(2, registry.currentPage());
+    TEST_ASSERT_EQUAL_INT(1, page1.leaveCount);
+    TEST_ASSERT_EQUAL_INT(1, page2.enterCount);
+
+    // Повторный выбор той же страницы не должен вызывать лишние enter/leave.
+    TEST_ASSERT_TRUE(registry.setCurrentPage(2));
+    TEST_ASSERT_EQUAL_INT(1, page2.enterCount);
+    TEST_ASSERT_EQUAL_INT(0, page2.leaveCount);
+}
+
+void test_screen_manager_dispatches_ui_events_to_active_page_and_keeps_callback() {
+    MockTransport physicalTransport;
+    ScreenBridge physicalBridge(physicalTransport);
+
+    screenlib::ScreenConfig cfg{};
+    cfg.physical.enabled = true;
+    cfg.web.enabled = false;
+    cfg.mirrorMode = screenlib::MirrorMode::PhysicalOnly;
+
+    screenlib::ScreenManager manager;
+    TEST_ASSERT_TRUE(manager.init(cfg));
+    manager.bindPhysical(&physicalBridge);
+
+    screenlib::PageRegistry registry;
+    TestPageController page1(1);
+    TestPageController page2(2);
+    TEST_ASSERT_TRUE(registry.registerPage(&page1));
+    TEST_ASSERT_TRUE(registry.registerPage(&page2));
+    TEST_ASSERT_TRUE(registry.setCurrentPage(1));
+
+    manager.setPageRegistry(&registry);
+    manager.setEventHandler(&onManagerEvent, nullptr);
+    gCaptured = CapturedEvent{};
+
+    Envelope buttonEvent{};
+    buttonEvent.which_payload = Envelope_button_event_tag;
+    buttonEvent.payload.button_event.page_id = 1;
+    buttonEvent.payload.button_event.element_id = 77;
+
+    std::vector<uint8_t> frame;
+    TEST_ASSERT_TRUE(buildFrameFromEnvelope(buttonEvent, frame, 21));
+    physicalTransport.pushRx(frame.data(), frame.size());
+    manager.tick();
+
+    TEST_ASSERT_EQUAL_INT(1, page1.envelopeCount);
+    TEST_ASSERT_EQUAL_INT(0, page2.envelopeCount);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_button_event_tag, page1.lastTag);
+    TEST_ASSERT_TRUE(page1.lastCtx.isPhysical);
+    TEST_ASSERT_EQUAL_INT(1, gCaptured.count);
+
+    TEST_ASSERT_TRUE(registry.setCurrentPage(2));
+
+    Envelope inputEvent{};
+    inputEvent.which_payload = Envelope_input_event_tag;
+    inputEvent.payload.input_event.page_id = 2;
+    inputEvent.payload.input_event.element_id = 99;
+    inputEvent.payload.input_event.which_value = InputEvent_int_value_tag;
+    inputEvent.payload.input_event.value.int_value = 123;
+
+    frame.clear();
+    TEST_ASSERT_TRUE(buildFrameFromEnvelope(inputEvent, frame, 22));
+    physicalTransport.pushRx(frame.data(), frame.size());
+    manager.tick();
+
+    TEST_ASSERT_EQUAL_INT(1, page1.envelopeCount);
+    TEST_ASSERT_EQUAL_INT(1, page2.envelopeCount);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_input_event_tag, page2.lastTag);
+    TEST_ASSERT_EQUAL_INT(2, gCaptured.count);
+}
+
 struct BridgeCapture {
     int count = 0;
 } gBridgeCapture;
@@ -222,6 +334,8 @@ void run_all_tests() {
     RUN_TEST(test_screen_bridge_show_page_encodes_envelope);
     RUN_TEST(test_screen_manager_routes_by_mode);
     RUN_TEST(test_screen_manager_receives_incoming_events_with_context);
+    RUN_TEST(test_page_registry_switch_calls_enter_leave);
+    RUN_TEST(test_screen_manager_dispatches_ui_events_to_active_page_and_keeps_callback);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
 }
 
