@@ -4,12 +4,15 @@ syntax = "proto3";
 // machine.proto — протокол обмена между контроллером и экраном.
 //
 // Направление:
-//   Контроллер → Экран : ShowPage, SetText, SetColor, SetVisible,
-//                         SetValue, SetBatch, Heartbeat
-//   Экран → Контроллер : ButtonEvent, InputEvent, Heartbeat
+//   Контроллер → Экран : push UI-команды + service request
+//   Экран → Контроллер : user events + service response
 //
 // Один Envelope = одна команда.
 // Для пакетного обновления нескольких элементов — SetBatch.
+//
+// Архитектурно:
+// - динамическое состояние UI синхронизируется push-командами с backend;
+// - service request/response используется для metadata, snapshot и диагностики.
 // ============================================================
 
 // Обёртка — всегда передаётся как payload в FrameCodec
@@ -24,6 +27,17 @@ message Envelope {
     ButtonEvent button_event = 7;  // нажатие кнопки (экран → контроллер)
     InputEvent  input_event  = 8;  // ввод значения пользователем
     Heartbeat   heartbeat    = 9;  // watchdog / детекция разрыва
+
+    // ---- Service layer (metadata / request-response) ----
+    Hello               hello                = 10; // screen client может слать при connect/reconnect
+    RequestDeviceInfo   request_device_info  = 11; // backend -> screen
+    DeviceInfo          device_info          = 12; // screen -> backend (response или async info)
+    RequestCurrentPage  request_current_page = 13; // backend -> screen
+    CurrentPage         current_page         = 14; // screen -> backend
+    RequestPageState    request_page_state   = 15; // backend -> screen
+    PageState           page_state           = 16; // screen -> backend
+    RequestElementState request_element_state= 17; // backend -> screen
+    ElementState        element_state        = 18; // screen -> backend
   }
 }
 
@@ -89,4 +103,89 @@ message InputEvent {
 // Heartbeat — обе стороны шлют периодически для контроля связи
 message Heartbeat {
   uint32 uptime_ms = 1;  // время работы отправителя в мс
+}
+
+// ---- Service layer: metadata / request-response ----
+
+// Тип динамического состояния элемента в snapshot-ответах.
+enum ElementStateType {
+  ELEMENT_STATE_UNKNOWN = 0;
+  ELEMENT_STATE_TEXT    = 1;
+  ELEMENT_STATE_INT     = 2;
+  ELEMENT_STATE_VISIBLE = 3;
+  ELEMENT_STATE_COLOR   = 4;
+}
+
+// Цветовое состояние элемента.
+message ColorState {
+  uint32 bg_color = 1;
+  uint32 fg_color = 2;
+}
+
+// Состояние одного динамического элемента.
+// Для компактности один элемент несет одно актуальное значение (oneof value).
+message PageElementState {
+  uint32 element_id = 1;
+  ElementStateType type = 2;
+  oneof value {
+    string text_value = 3;
+    int32  int_value  = 4;
+    bool   visible    = 5;
+    ColorState color  = 6;
+  }
+}
+
+// Идентификация и capability screen client.
+message DeviceInfo {
+  uint32 protocol_version = 1;
+  string fw_version       = 2;
+  string ui_version       = 3;
+  string screen_type      = 4;
+  string client_type      = 5;
+  string device_id        = 6;
+  string instance_id      = 7;
+  uint32 capabilities     = 8; // bit flags
+}
+
+// Асинхронное приветствие screen client (например, после reconnect).
+message Hello {
+  DeviceInfo device_info = 1;
+}
+
+message RequestDeviceInfo {
+  uint32 request_id = 1;
+}
+
+message RequestCurrentPage {
+  uint32 request_id = 1;
+}
+
+message CurrentPage {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+}
+
+message RequestPageState {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+}
+
+// Snapshot динамического состояния конкретной страницы.
+message PageState {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+  repeated PageElementState elements = 3;
+}
+
+message RequestElementState {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+  uint32 element_id = 3;
+}
+
+message ElementState {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+  bool found        = 3;
+  PageElementState element = 4;
 }

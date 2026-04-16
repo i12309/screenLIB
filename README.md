@@ -73,6 +73,18 @@ lib/
 ITransport -> ScreenClient -> IUiAdapter
 ```
 
+## Protocol Model
+
+В протоколе используются два класса сообщений:
+
+- `push UI commands` (основной путь синхронизации UI): `show_page`, `set_text`, `set_value`, `set_visible`, `set_color`, `set_batch`.
+- `service request/response` (metadata, snapshot, диагностика): `hello`, `request_device_info`/`device_info`, `request_current_page`/`current_page`, `request_page_state`/`page_state`, `request_element_state`/`element_state`.
+
+Правило источника истины:
+
+- backend — источник истины для динамического UI состояния (обычная работа остается push-driven).
+- screen client — источник metadata и локального состояния страницы по запросу (service layer).
+
 ## EezLvglAdapter
 
 `EezLvglAdapter` — первый concrete `IUiAdapter` для EEZ/LVGL.

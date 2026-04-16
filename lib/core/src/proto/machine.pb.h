@@ -9,6 +9,16 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+/* Тип динамического состояния элемента в snapshot-ответах. */
+typedef enum _ElementStateType {
+    ElementStateType_ELEMENT_STATE_UNKNOWN = 0,
+    ElementStateType_ELEMENT_STATE_TEXT = 1,
+    ElementStateType_ELEMENT_STATE_INT = 2,
+    ElementStateType_ELEMENT_STATE_VISIBLE = 3,
+    ElementStateType_ELEMENT_STATE_COLOR = 4
+} ElementStateType;
+
 /* Struct definitions */
 /* Показать страницу по ID */
 typedef struct _ShowPage {
@@ -75,6 +85,84 @@ typedef struct _Heartbeat {
     uint32_t uptime_ms; /* время работы отправителя в мс */
 } Heartbeat;
 
+/* Цветовое состояние элемента. */
+typedef struct _ColorState {
+    uint32_t bg_color;
+    uint32_t fg_color;
+} ColorState;
+
+/* Состояние одного динамического элемента.
+ Для компактности один элемент несет одно актуальное значение (oneof value). */
+typedef struct _PageElementState {
+    uint32_t element_id;
+    ElementStateType type;
+    pb_size_t which_value;
+    union {
+        char text_value[32];
+        int32_t int_value;
+        bool visible;
+        ColorState color;
+    } value;
+} PageElementState;
+
+/* Идентификация и capability screen client. */
+typedef struct _DeviceInfo {
+    uint32_t protocol_version;
+    char fw_version[24];
+    char ui_version[24];
+    char screen_type[24];
+    char client_type[24];
+    char device_id[32];
+    char instance_id[32];
+    uint32_t capabilities; /* bit flags */
+} DeviceInfo;
+
+/* Асинхронное приветствие screen client (например, после reconnect). */
+typedef struct _Hello {
+    bool has_device_info;
+    DeviceInfo device_info;
+} Hello;
+
+typedef struct _RequestDeviceInfo {
+    uint32_t request_id;
+} RequestDeviceInfo;
+
+typedef struct _RequestCurrentPage {
+    uint32_t request_id;
+} RequestCurrentPage;
+
+typedef struct _CurrentPage {
+    uint32_t request_id;
+    uint32_t page_id;
+} CurrentPage;
+
+typedef struct _RequestPageState {
+    uint32_t request_id;
+    uint32_t page_id;
+} RequestPageState;
+
+/* Snapshot динамического состояния конкретной страницы. */
+typedef struct _PageState {
+    uint32_t request_id;
+    uint32_t page_id;
+    pb_size_t elements_count;
+    PageElementState elements[8];
+} PageState;
+
+typedef struct _RequestElementState {
+    uint32_t request_id;
+    uint32_t page_id;
+    uint32_t element_id;
+} RequestElementState;
+
+typedef struct _ElementState {
+    uint32_t request_id;
+    uint32_t page_id;
+    bool found;
+    bool has_element;
+    PageElementState element;
+} ElementState;
+
 /* Обёртка — всегда передаётся как payload в FrameCodec */
 typedef struct _Envelope {
     pb_size_t which_payload;
@@ -88,6 +176,16 @@ typedef struct _Envelope {
         ButtonEvent button_event; /* нажатие кнопки (экран → контроллер) */
         InputEvent input_event; /* ввод значения пользователем */
         Heartbeat heartbeat; /* watchdog / детекция разрыва */
+        /* ---- Service layer (metadata / request-response) ---- */
+        Hello hello; /* screen client может слать при connect/reconnect */
+        RequestDeviceInfo request_device_info; /* backend -> screen */
+        DeviceInfo device_info; /* screen -> backend (response или async info) */
+        RequestCurrentPage request_current_page; /* backend -> screen */
+        CurrentPage current_page; /* screen -> backend */
+        RequestPageState request_page_state; /* backend -> screen */
+        PageState page_state; /* screen -> backend */
+        RequestElementState request_element_state; /* backend -> screen */
+        ElementState element_state; /* screen -> backend */
     } payload;
 } Envelope;
 
@@ -95,6 +193,34 @@ typedef struct _Envelope {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Helper constants for enums */
+#define _ElementStateType_MIN ElementStateType_ELEMENT_STATE_UNKNOWN
+#define _ElementStateType_MAX ElementStateType_ELEMENT_STATE_COLOR
+#define _ElementStateType_ARRAYSIZE ((ElementStateType)(ElementStateType_ELEMENT_STATE_COLOR+1))
+
+
+
+
+
+
+
+
+
+
+
+
+#define PageElementState_type_ENUMTYPE ElementStateType
+
+
+
+
+
+
+
+
+
+
 
 /* Initializer values for message structs */
 #define Envelope_init_default                    {0, {ShowPage_init_default}}
@@ -107,6 +233,17 @@ extern "C" {
 #define ButtonEvent_init_default                 {0, 0}
 #define InputEvent_init_default                  {0, 0, 0, {0}}
 #define Heartbeat_init_default                   {0}
+#define ColorState_init_default                  {0, 0}
+#define PageElementState_init_default            {0, _ElementStateType_MIN, 0, {""}}
+#define DeviceInfo_init_default                  {0, "", "", "", "", "", "", 0}
+#define Hello_init_default                       {false, DeviceInfo_init_default}
+#define RequestDeviceInfo_init_default           {0}
+#define RequestCurrentPage_init_default          {0}
+#define CurrentPage_init_default                 {0, 0}
+#define RequestPageState_init_default            {0, 0}
+#define PageState_init_default                   {0, 0, 0, {PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default}}
+#define RequestElementState_init_default         {0, 0, 0}
+#define ElementState_init_default                {0, 0, 0, false, PageElementState_init_default}
 #define Envelope_init_zero                       {0, {ShowPage_init_zero}}
 #define ShowPage_init_zero                       {0}
 #define SetText_init_zero                        {0, ""}
@@ -117,6 +254,17 @@ extern "C" {
 #define ButtonEvent_init_zero                    {0, 0}
 #define InputEvent_init_zero                     {0, 0, 0, {0}}
 #define Heartbeat_init_zero                      {0}
+#define ColorState_init_zero                     {0, 0}
+#define PageElementState_init_zero               {0, _ElementStateType_MIN, 0, {""}}
+#define DeviceInfo_init_zero                     {0, "", "", "", "", "", "", 0}
+#define Hello_init_zero                          {false, DeviceInfo_init_zero}
+#define RequestDeviceInfo_init_zero              {0}
+#define RequestCurrentPage_init_zero             {0}
+#define CurrentPage_init_zero                    {0, 0}
+#define RequestPageState_init_zero               {0, 0}
+#define PageState_init_zero                      {0, 0, 0, {PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero}}
+#define RequestElementState_init_zero            {0, 0, 0}
+#define ElementState_init_zero                   {0, 0, 0, false, PageElementState_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ShowPage_page_id_tag                     1
@@ -140,6 +288,39 @@ extern "C" {
 #define InputEvent_int_value_tag                 3
 #define InputEvent_string_value_tag              4
 #define Heartbeat_uptime_ms_tag                  1
+#define ColorState_bg_color_tag                  1
+#define ColorState_fg_color_tag                  2
+#define PageElementState_element_id_tag          1
+#define PageElementState_type_tag                2
+#define PageElementState_text_value_tag          3
+#define PageElementState_int_value_tag           4
+#define PageElementState_visible_tag             5
+#define PageElementState_color_tag               6
+#define DeviceInfo_protocol_version_tag          1
+#define DeviceInfo_fw_version_tag                2
+#define DeviceInfo_ui_version_tag                3
+#define DeviceInfo_screen_type_tag               4
+#define DeviceInfo_client_type_tag               5
+#define DeviceInfo_device_id_tag                 6
+#define DeviceInfo_instance_id_tag               7
+#define DeviceInfo_capabilities_tag              8
+#define Hello_device_info_tag                    1
+#define RequestDeviceInfo_request_id_tag         1
+#define RequestCurrentPage_request_id_tag        1
+#define CurrentPage_request_id_tag               1
+#define CurrentPage_page_id_tag                  2
+#define RequestPageState_request_id_tag          1
+#define RequestPageState_page_id_tag             2
+#define PageState_request_id_tag                 1
+#define PageState_page_id_tag                    2
+#define PageState_elements_tag                   3
+#define RequestElementState_request_id_tag       1
+#define RequestElementState_page_id_tag          2
+#define RequestElementState_element_id_tag       3
+#define ElementState_request_id_tag              1
+#define ElementState_page_id_tag                 2
+#define ElementState_found_tag                   3
+#define ElementState_element_tag                 4
 #define Envelope_show_page_tag                   1
 #define Envelope_set_text_tag                    2
 #define Envelope_set_color_tag                   3
@@ -149,6 +330,15 @@ extern "C" {
 #define Envelope_button_event_tag                7
 #define Envelope_input_event_tag                 8
 #define Envelope_heartbeat_tag                   9
+#define Envelope_hello_tag                       10
+#define Envelope_request_device_info_tag         11
+#define Envelope_device_info_tag                 12
+#define Envelope_request_current_page_tag        13
+#define Envelope_current_page_tag                14
+#define Envelope_request_page_state_tag          15
+#define Envelope_page_state_tag                  16
+#define Envelope_request_element_state_tag       17
+#define Envelope_element_state_tag               18
 
 /* Struct field encoding specification for nanopb */
 #define Envelope_FIELDLIST(X, a) \
@@ -160,7 +350,16 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_value,payload.set_value),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_batch,payload.set_batch),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,button_event,payload.button_event),   7) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,input_event,payload.input_event),   8) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,heartbeat,payload.heartbeat),   9)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,heartbeat,payload.heartbeat),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,hello,payload.hello),  10) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_device_info,payload.request_device_info),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,device_info,payload.device_info),  12) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_current_page,payload.request_current_page),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,current_page,payload.current_page),  14) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_page_state,payload.request_page_state),  15) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_state,payload.page_state),  16) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_element_state,payload.request_element_state),  17) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,element_state,payload.element_state),  18)
 #define Envelope_CALLBACK NULL
 #define Envelope_DEFAULT NULL
 #define Envelope_payload_show_page_MSGTYPE ShowPage
@@ -172,6 +371,15 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,heartbeat,payload.heartbeat),   9)
 #define Envelope_payload_button_event_MSGTYPE ButtonEvent
 #define Envelope_payload_input_event_MSGTYPE InputEvent
 #define Envelope_payload_heartbeat_MSGTYPE Heartbeat
+#define Envelope_payload_hello_MSGTYPE Hello
+#define Envelope_payload_request_device_info_MSGTYPE RequestDeviceInfo
+#define Envelope_payload_device_info_MSGTYPE DeviceInfo
+#define Envelope_payload_request_current_page_MSGTYPE RequestCurrentPage
+#define Envelope_payload_current_page_MSGTYPE CurrentPage
+#define Envelope_payload_request_page_state_MSGTYPE RequestPageState
+#define Envelope_payload_page_state_MSGTYPE PageState
+#define Envelope_payload_request_element_state_MSGTYPE RequestElementState
+#define Envelope_payload_element_state_MSGTYPE ElementState
 
 #define ShowPage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   page_id,           1)
@@ -234,6 +442,87 @@ X(a, STATIC,   SINGULAR, UINT32,   uptime_ms,         1)
 #define Heartbeat_CALLBACK NULL
 #define Heartbeat_DEFAULT NULL
 
+#define ColorState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   bg_color,          1) \
+X(a, STATIC,   SINGULAR, UINT32,   fg_color,          2)
+#define ColorState_CALLBACK NULL
+#define ColorState_DEFAULT NULL
+
+#define PageElementState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
+X(a, STATIC,   SINGULAR, UENUM,    type,              2) \
+X(a, STATIC,   ONEOF,    STRING,   (value,text_value,value.text_value),   3) \
+X(a, STATIC,   ONEOF,    INT32,    (value,int_value,value.int_value),   4) \
+X(a, STATIC,   ONEOF,    BOOL,     (value,visible,value.visible),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (value,color,value.color),   6)
+#define PageElementState_CALLBACK NULL
+#define PageElementState_DEFAULT NULL
+#define PageElementState_value_color_MSGTYPE ColorState
+
+#define DeviceInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   protocol_version,   1) \
+X(a, STATIC,   SINGULAR, STRING,   fw_version,        2) \
+X(a, STATIC,   SINGULAR, STRING,   ui_version,        3) \
+X(a, STATIC,   SINGULAR, STRING,   screen_type,       4) \
+X(a, STATIC,   SINGULAR, STRING,   client_type,       5) \
+X(a, STATIC,   SINGULAR, STRING,   device_id,         6) \
+X(a, STATIC,   SINGULAR, STRING,   instance_id,       7) \
+X(a, STATIC,   SINGULAR, UINT32,   capabilities,      8)
+#define DeviceInfo_CALLBACK NULL
+#define DeviceInfo_DEFAULT NULL
+
+#define Hello_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_info,       1)
+#define Hello_CALLBACK NULL
+#define Hello_DEFAULT NULL
+#define Hello_device_info_MSGTYPE DeviceInfo
+
+#define RequestDeviceInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1)
+#define RequestDeviceInfo_CALLBACK NULL
+#define RequestDeviceInfo_DEFAULT NULL
+
+#define RequestCurrentPage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1)
+#define RequestCurrentPage_CALLBACK NULL
+#define RequestCurrentPage_DEFAULT NULL
+
+#define CurrentPage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2)
+#define CurrentPage_CALLBACK NULL
+#define CurrentPage_DEFAULT NULL
+
+#define RequestPageState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2)
+#define RequestPageState_CALLBACK NULL
+#define RequestPageState_DEFAULT NULL
+
+#define PageState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
+X(a, STATIC,   REPEATED, MESSAGE,  elements,          3)
+#define PageState_CALLBACK NULL
+#define PageState_DEFAULT NULL
+#define PageState_elements_MSGTYPE PageElementState
+
+#define RequestElementState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
+X(a, STATIC,   SINGULAR, UINT32,   element_id,        3)
+#define RequestElementState_CALLBACK NULL
+#define RequestElementState_DEFAULT NULL
+
+#define ElementState_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
+X(a, STATIC,   SINGULAR, BOOL,     found,             3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  element,           4)
+#define ElementState_CALLBACK NULL
+#define ElementState_DEFAULT NULL
+#define ElementState_element_MSGTYPE PageElementState
+
 extern const pb_msgdesc_t Envelope_msg;
 extern const pb_msgdesc_t ShowPage_msg;
 extern const pb_msgdesc_t SetText_msg;
@@ -244,6 +533,17 @@ extern const pb_msgdesc_t SetBatch_msg;
 extern const pb_msgdesc_t ButtonEvent_msg;
 extern const pb_msgdesc_t InputEvent_msg;
 extern const pb_msgdesc_t Heartbeat_msg;
+extern const pb_msgdesc_t ColorState_msg;
+extern const pb_msgdesc_t PageElementState_msg;
+extern const pb_msgdesc_t DeviceInfo_msg;
+extern const pb_msgdesc_t Hello_msg;
+extern const pb_msgdesc_t RequestDeviceInfo_msg;
+extern const pb_msgdesc_t RequestCurrentPage_msg;
+extern const pb_msgdesc_t CurrentPage_msg;
+extern const pb_msgdesc_t RequestPageState_msg;
+extern const pb_msgdesc_t PageState_msg;
+extern const pb_msgdesc_t RequestElementState_msg;
+extern const pb_msgdesc_t ElementState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Envelope_fields &Envelope_msg
@@ -256,13 +556,35 @@ extern const pb_msgdesc_t Heartbeat_msg;
 #define ButtonEvent_fields &ButtonEvent_msg
 #define InputEvent_fields &InputEvent_msg
 #define Heartbeat_fields &Heartbeat_msg
+#define ColorState_fields &ColorState_msg
+#define PageElementState_fields &PageElementState_msg
+#define DeviceInfo_fields &DeviceInfo_msg
+#define Hello_fields &Hello_msg
+#define RequestDeviceInfo_fields &RequestDeviceInfo_msg
+#define RequestCurrentPage_fields &RequestCurrentPage_msg
+#define CurrentPage_fields &CurrentPage_msg
+#define RequestPageState_fields &RequestPageState_msg
+#define PageState_fields &PageState_msg
+#define RequestElementState_fields &RequestElementState_msg
+#define ElementState_fields &ElementState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define ButtonEvent_size                         12
+#define ColorState_size                          12
+#define CurrentPage_size                         12
+#define DeviceInfo_size                          178
+#define ElementState_size                        57
 #define Envelope_size                            723
 #define Heartbeat_size                           6
+#define Hello_size                               181
 #define InputEvent_size                          45
 #define MACHINE_PB_H_MAX_SIZE                    Envelope_size
+#define PageElementState_size                    41
+#define PageState_size                           356
+#define RequestCurrentPage_size                  6
+#define RequestDeviceInfo_size                   6
+#define RequestElementState_size                 18
+#define RequestPageState_size                    12
 #define SetBatch_size                            720
 #define SetColor_size                            18
 #define SetText_size                             39

@@ -11,6 +11,15 @@
 # SetBatch с 8 * 64-байтными строками уже превышал kMaxPayload=512.
 SetText.text                    max_size:32
 InputEvent.string_value         max_size:32
+PageElementState.text_value     max_size:32
+
+# DeviceInfo строки.
+DeviceInfo.fw_version           max_size:24
+DeviceInfo.ui_version           max_size:24
+DeviceInfo.screen_type          max_size:24
+DeviceInfo.client_type          max_size:24
+DeviceInfo.device_id            max_size:32
+DeviceInfo.instance_id          max_size:32
 
 # SetBatch: максимум 8 элементов каждого типа.
 # Расчёт худшего случая при max_size=32 и max_count=8:
@@ -24,3 +33,6 @@ SetBatch.texts                  max_count:8
 SetBatch.colors                 max_count:8
 SetBatch.visibles               max_count:8
 SetBatch.values                 max_count:8
+
+# Service snapshot: ограничение числа динамических элементов в одном ответе.
+PageState.elements              max_count:8

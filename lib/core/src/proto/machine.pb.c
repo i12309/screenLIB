@@ -36,4 +36,39 @@ PB_BIND(InputEvent, InputEvent, AUTO)
 PB_BIND(Heartbeat, Heartbeat, AUTO)
 
 
+PB_BIND(ColorState, ColorState, AUTO)
+
+
+PB_BIND(PageElementState, PageElementState, AUTO)
+
+
+PB_BIND(DeviceInfo, DeviceInfo, AUTO)
+
+
+PB_BIND(Hello, Hello, AUTO)
+
+
+PB_BIND(RequestDeviceInfo, RequestDeviceInfo, AUTO)
+
+
+PB_BIND(RequestCurrentPage, RequestCurrentPage, AUTO)
+
+
+PB_BIND(CurrentPage, CurrentPage, AUTO)
+
+
+PB_BIND(RequestPageState, RequestPageState, AUTO)
+
+
+PB_BIND(PageState, PageState, 2)
+
+
+PB_BIND(RequestElementState, RequestElementState, AUTO)
+
+
+PB_BIND(ElementState, ElementState, AUTO)
+
+
+
+
 
