@@ -1,58 +1,61 @@
 #pragma once
 
 #include "IUiAdapter.h"
+#include "lvgl_eez/UiObjectMap.h"
 
 namespace screenlib::adapter {
 
-// Заготовка адаптера EEZ/LVGL.
-// Реализация будет связывать element_id с конкретными LVGL объектами.
+class EezLvglAdapter;
+
+// Hooks для интеграции с реальным EEZ/LVGL generated UI.
+// Библиотека не дублирует generated код, а вызывает переданные callbacks.
+struct EezLvglHooks {
+    bool (*showPage)(void* userData, void* pageTarget) = nullptr;
+    bool (*setText)(void* userData, void* uiObject, const char* text) = nullptr;
+    bool (*setValue)(void* userData, void* uiObject, int32_t value) = nullptr;
+    bool (*setVisible)(void* userData, void* uiObject, bool visible) = nullptr;
+    bool (*setColor)(void* userData, void* uiObject, uint32_t bgColor, uint32_t fgColor) = nullptr;
+
+    // Опциональный poll/flush входных событий UI.
+    // Может быть no-op, если UI callbacks публикуют события сразу.
+    void (*tickInput)(void* userData, EezLvglAdapter& adapter) = nullptr;
+};
+
+// Первая concrete реализация IUiAdapter для EEZ/LVGL.
 class EezLvglAdapter : public IUiAdapter {
 public:
-    bool showPage(uint32_t pageId) override {
-        (void)pageId;
-        return false;
-    }
+    EezLvglAdapter(UiObjectMap* objectMap = nullptr,
+                   const EezLvglHooks& hooks = EezLvglHooks{},
+                   void* hookUserData = nullptr);
 
-    bool setText(uint32_t elementId, const char* text) override {
-        (void)elementId;
-        (void)text;
-        return false;
-    }
+    void setObjectMap(UiObjectMap* objectMap);
+    void setHooks(const EezLvglHooks& hooks, void* hookUserData = nullptr);
 
-    bool setValue(uint32_t elementId, int32_t value) override {
-        (void)elementId;
-        (void)value;
-        return false;
-    }
+    bool showPage(uint32_t pageId) override;
+    bool setText(uint32_t elementId, const char* text) override;
+    bool setValue(uint32_t elementId, int32_t value) override;
+    bool setVisible(uint32_t elementId, bool visible) override;
+    bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) override;
+    bool applyBatch(const SetBatch& batch) override;
 
-    bool setVisible(uint32_t elementId, bool visible) override {
-        (void)elementId;
-        (void)visible;
-        return false;
-    }
+    void setEventSink(EventSink sink, void* userData) override;
+    void tickInput() override;
 
-    bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) override {
-        (void)elementId;
-        (void)bgColor;
-        (void)fgColor;
-        return false;
-    }
-
-    bool applyBatch(const SetBatch& batch) override {
-        (void)batch;
-        return false;
-    }
-
-    void setEventSink(EventSink sink, void* userData) override {
-        _sink = sink;
-        _sinkUser = userData;
-    }
-
-    void tickInput() override {}
+    // Методы для UI callback-ов (LVGL/EEZ -> protocol events).
+    bool emitButtonEvent(uint32_t elementId, uint32_t pageId);
+    bool emitInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value);
+    bool emitInputEventString(uint32_t elementId, uint32_t pageId, const char* text);
 
 private:
+    UiObjectMap* _objectMap = nullptr;
+    EezLvglHooks _hooks{};
+    void* _hookUserData = nullptr;
+
     EventSink _sink = nullptr;
     void* _sinkUser = nullptr;
+
+    bool emitEnvelope(const Envelope& env);
+    static void copyTextSafe(char* dst, size_t dstSize, const char* src);
 };
 
 }  // namespace screenlib::adapter

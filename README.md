@@ -46,8 +46,8 @@ lib/
 ### `adapter`
 
 - `IUiAdapter.h` (общий контракт для client runtime)
-- `lvgl_eez/EezLvglAdapter.h` (заготовка)
-- `lvgl_eez/UiObjectMap.h` (mapping `element_id -> UI object`)
+- `lvgl_eez/EezLvglAdapter.h/.cpp` (реализация под EEZ/LVGL)
+- `lvgl_eez/UiObjectMap.h/.cpp` (mapping `page_id/element_id -> UI target/object`)
 - `lvgl_eez/` содержит конкретную реализацию адаптера под LVGL/EEZ
 - здесь же будут другие UI/platform adapters
 
@@ -71,6 +71,21 @@ lib/
 
 ```text
 ITransport -> ScreenClient -> IUiAdapter
+```
+
+## EezLvglAdapter
+
+`EezLvglAdapter` — первый concrete `IUiAdapter` для EEZ/LVGL.
+
+- Применяет входящие команды `show_page/set_text/set_value/set_visible/set_color/set_batch` к UI через `UiObjectMap`.
+- `UiObjectMap` хранит только mapping `page_id/element_id` к UI-target/object и не содержит transport/proto логики.
+- Пользовательские UI-события отправляются наружу только как `button_event`/`input_event` через `EventSink`.
+- Сам адаптер остается чистым UI-слоем и не зависит от host/runtime-классов.
+
+Рабочая цепочка для экранной стороны:
+
+```text
+ITransport -> ScreenClient -> EezLvglAdapter -> EEZ/LVGL UI
 ```
 
 Если в host-конфиге приходит `OutputType::WsClient`, `ScreenSystem::init(...)` возвращает ошибку:
