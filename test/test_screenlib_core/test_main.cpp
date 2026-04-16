@@ -286,6 +286,104 @@ void test_screen_manager_dispatches_ui_events_to_active_page_and_keeps_callback(
     TEST_ASSERT_EQUAL_INT(2, gCaptured.count);
 }
 
+void test_screen_manager_show_page_syncs_registry_and_routes_to_new_page() {
+    MockTransport physicalTransport;
+    ScreenBridge physicalBridge(physicalTransport);
+
+    screenlib::ScreenConfig cfg{};
+    cfg.physical.enabled = true;
+    cfg.web.enabled = false;
+    cfg.mirrorMode = screenlib::MirrorMode::PhysicalOnly;
+
+    screenlib::ScreenManager manager;
+    TEST_ASSERT_TRUE(manager.init(cfg));
+    manager.bindPhysical(&physicalBridge);
+
+    screenlib::PageRegistry registry;
+    TestPageController page1(1);
+    TestPageController page2(2);
+    TEST_ASSERT_TRUE(registry.registerPage(&page1));
+    TEST_ASSERT_TRUE(registry.registerPage(&page2));
+    manager.setPageRegistry(&registry);
+
+    // showPage должен автоматически синхронизировать текущую страницу в registry.
+    TEST_ASSERT_TRUE(manager.showPage(1));
+    TEST_ASSERT_EQUAL_UINT32(1, registry.currentPage());
+    TEST_ASSERT_EQUAL_INT(1, page1.enterCount);
+    TEST_ASSERT_EQUAL_INT(0, page2.enterCount);
+
+    TEST_ASSERT_TRUE(manager.showPage(2));
+    TEST_ASSERT_EQUAL_UINT32(2, registry.currentPage());
+    TEST_ASSERT_EQUAL_INT(1, page1.leaveCount);
+    TEST_ASSERT_EQUAL_INT(1, page2.enterCount);
+
+    Envelope buttonEvent{};
+    buttonEvent.which_payload = Envelope_button_event_tag;
+    buttonEvent.payload.button_event.page_id = 2;
+    buttonEvent.payload.button_event.element_id = 41;
+
+    std::vector<uint8_t> frame;
+    TEST_ASSERT_TRUE(buildFrameFromEnvelope(buttonEvent, frame, 31));
+    physicalTransport.pushRx(frame.data(), frame.size());
+    manager.tick();
+
+    TEST_ASSERT_EQUAL_INT(0, page1.envelopeCount);
+    TEST_ASSERT_EQUAL_INT(1, page2.envelopeCount);
+}
+
+void test_screen_manager_show_page_failure_does_not_advance_registry() {
+    MockTransport physicalTransport;
+    ScreenBridge physicalBridge(physicalTransport);
+
+    screenlib::ScreenConfig cfg{};
+    cfg.physical.enabled = true;
+    cfg.web.enabled = false;
+    cfg.mirrorMode = screenlib::MirrorMode::PhysicalOnly;
+
+    screenlib::ScreenManager manager;
+    TEST_ASSERT_TRUE(manager.init(cfg));
+    manager.bindPhysical(&physicalBridge);
+
+    screenlib::PageRegistry registry;
+    TestPageController page1(1);
+    TestPageController page2(2);
+    TEST_ASSERT_TRUE(registry.registerPage(&page1));
+    TEST_ASSERT_TRUE(registry.registerPage(&page2));
+    manager.setPageRegistry(&registry);
+
+    TEST_ASSERT_TRUE(manager.showPage(1));
+    TEST_ASSERT_EQUAL_UINT32(1, registry.currentPage());
+
+    // Эмулируем полный провал отправки showPage.
+    physicalTransport.isConnected = false;
+    TEST_ASSERT_FALSE(manager.showPage(2));
+    TEST_ASSERT_EQUAL_UINT32(1, registry.currentPage());
+    TEST_ASSERT_EQUAL_INT(1, page1.enterCount);
+    TEST_ASSERT_EQUAL_INT(0, page1.leaveCount);
+    TEST_ASSERT_EQUAL_INT(0, page2.enterCount);
+}
+
+void test_page_registry_strict_policy_ignores_foreign_page_id() {
+    screenlib::PageRegistry registry;
+    TestPageController page1(1);
+    TestPageController page2(2);
+
+    TEST_ASSERT_TRUE(registry.registerPage(&page1));
+    TEST_ASSERT_TRUE(registry.registerPage(&page2));
+    TEST_ASSERT_TRUE(registry.setCurrentPage(1));
+
+    Envelope buttonEvent{};
+    buttonEvent.which_payload = Envelope_button_event_tag;
+    buttonEvent.payload.button_event.page_id = 2;
+    buttonEvent.payload.button_event.element_id = 17;
+
+    screenlib::ScreenEventContext ctx{};
+    const bool handled = registry.dispatchEnvelope(buttonEvent, ctx);
+    TEST_ASSERT_FALSE(handled);
+    TEST_ASSERT_EQUAL_INT(0, page1.envelopeCount);
+    TEST_ASSERT_EQUAL_INT(0, page2.envelopeCount);
+}
+
 struct BridgeCapture {
     int count = 0;
 } gBridgeCapture;
@@ -336,6 +434,9 @@ void run_all_tests() {
     RUN_TEST(test_screen_manager_receives_incoming_events_with_context);
     RUN_TEST(test_page_registry_switch_calls_enter_leave);
     RUN_TEST(test_screen_manager_dispatches_ui_events_to_active_page_and_keeps_callback);
+    RUN_TEST(test_screen_manager_show_page_syncs_registry_and_routes_to_new_page);
+    RUN_TEST(test_screen_manager_show_page_failure_does_not_advance_registry);
+    RUN_TEST(test_page_registry_strict_policy_ignores_foreign_page_id);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
 }
 

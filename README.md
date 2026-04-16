@@ -82,3 +82,14 @@ for (;;) {
 }
 ```
 
+### showPage и PageRegistry
+
+- `ScreenManager::showPage(pageId)` после успешной отправки команды автоматически вызывает `PageRegistry::setCurrentPage(pageId)`, если registry подключен.
+- Если `showPage` не отправился ни в один целевой endpoint, current page в registry не меняется.
+- Если registry подключен, но `pageId` не зарегистрирован, `showPage` вернет `false`, чтобы не скрывать рассинхрон.
+
+### Политика роутинга событий (строгая, вариант B)
+
+- `PageRegistry` принимает только UI-события (`button_event`, `input_event`).
+- Событие передается в активную страницу только если `event.page_id == currentPage()`.
+- События с чужим `page_id` игнорируются как запоздалые/неактуальные.

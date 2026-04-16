@@ -41,7 +41,18 @@ bool ScreenManager::connectedWeb() const {
 }
 
 bool ScreenManager::showPage(uint32_t pageId) {
-    return sendShowPageByMode(pageId);
+    const bool sent = sendShowPageByMode(pageId);
+    if (!sent) {
+        return false;
+    }
+
+    // Синхронизируем registry только после успешной отправки showPage.
+    // Если страница не зарегистрирована, возвращаем false, чтобы не молча разойтись по состоянию.
+    if (_pageRegistry != nullptr) {
+        return _pageRegistry->setCurrentPage(pageId);
+    }
+
+    return true;
 }
 
 bool ScreenManager::setText(uint32_t elementId, const char* text) {

@@ -24,6 +24,7 @@ public:
 private:
     IPageController* findById(uint32_t pageId) const;
     static bool isUiEvent(pb_size_t tag);
+    static bool tryGetEventPageId(const Envelope& env, uint32_t& outPageId);
 
     IPageController* _pages[kMaxPages] = {};
     size_t _count = 0;
@@ -32,4 +33,3 @@ private:
 };
 
 }  // namespace screenlib
-

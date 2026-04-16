@@ -46,6 +46,18 @@ bool PageRegistry::dispatchEnvelope(const Envelope& env, const ScreenEventContex
     if (_current == nullptr || !isUiEvent(env.which_payload)) {
         return false;
     }
+
+    uint32_t eventPageId = 0;
+    if (!tryGetEventPageId(env, eventPageId)) {
+        return false;
+    }
+
+    // Строгая политика роутинга:
+    // событие обрабатывается только если page_id совпадает с текущей активной страницей.
+    if (eventPageId != _currentPageId) {
+        return false;
+    }
+
     return _current->onEnvelope(env, ctx);
 }
 
@@ -62,5 +74,18 @@ bool PageRegistry::isUiEvent(pb_size_t tag) {
     return tag == Envelope_button_event_tag || tag == Envelope_input_event_tag;
 }
 
-}  // namespace screenlib
+bool PageRegistry::tryGetEventPageId(const Envelope& env, uint32_t& outPageId) {
+    if (env.which_payload == Envelope_button_event_tag) {
+        outPageId = env.payload.button_event.page_id;
+        return true;
+    }
 
+    if (env.which_payload == Envelope_input_event_tag) {
+        outPageId = env.payload.input_event.page_id;
+        return true;
+    }
+
+    return false;
+}
+
+}  // namespace screenlib
