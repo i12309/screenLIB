@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-#include "../config/ScreenTypes.h"
-#include "../proto/machine.pb.h"
+#include "types/ScreenTypes.h"
+#include "proto/machine.pb.h"
 
 namespace screenlib {
 
@@ -20,4 +20,3 @@ public:
 };
 
 }  // namespace screenlib
-

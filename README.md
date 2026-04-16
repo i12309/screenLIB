@@ -1,26 +1,92 @@
 # screenLIB
 
-Библиотека и тестовый PlatformIO-проект для обмена с экранами через единый протокол:
+Библиотека для обмена с экранами по единому framed protobuf-протоколу (nanopb), разделенная на 4 модуля:
 
-- `ITransport` (`UartLink`, `WebSocketLink`, `WebSocketClientLink`)
-- `FrameCodec` (кадр + CRC)
-- `ProtoCodec` (nanopb `Envelope`)
-- `ScreenBridge` (message-level API)
-- `ScreenManager` / `ScreenSystem` (маршрутизация `physical/web/both`)
-- `PageRegistry` (роутинг UI-событий в активную страницу)
+- `core` — общий протокольный слой.
+- `host` — controller/runtime на стороне станка.
+- `client` — runtime на стороне экрана (web/WASM/ESP32 screen-side).
+- `adapter` — platform/UI адаптеры.
 
 ## Структура
 
-- `lib/screenlib/src/config`
-- `lib/screenlib/src/link`
-- `lib/screenlib/src/frame`
-- `lib/screenlib/src/proto`
-- `lib/screenlib/src/screen`
-- `lib/screenlib/src/manager`
-- `lib/screenlib/src/pages`
-- `lib/screenlib/src/system`
-- `src/main.cpp` — пример запуска.
-- `test/test_screenlib_core/test_main.cpp` — unit-тесты.
+```text
+lib/
+  core/
+  host/
+  client/
+  adapter/
+```
+
+### `core`
+
+- `link/ITransport.h`
+- `frame/FrameCodec.h/.cpp`
+- `proto/machine.proto`, `machine.options`, `machine.pb.h/.c`
+- `proto/ProtoCodec.h/.cpp`
+- `bridge/ScreenBridge.h/.cpp`
+- `types/ScreenTypes.h`
+
+### `host`
+
+- `config/ScreenConfig*`
+- `manager/ScreenEndpoint*`
+- `manager/ScreenManager*`
+- `pages/IPageController*`
+- `pages/PageRegistry*`
+- `system/ScreenSystem*`
+- `link/WebSocketServerLink*`
+
+### `client`
+
+- `link/WebSocketClientLink.h/.cpp`
+- `runtime/ScreenClient.h` (каркас)
+- `runtime/CommandDispatcher.h` (каркас)
+- `ui/IUiAdapter.h` (каркас)
+
+### `adapter`
+
+- `link/UartLink.h`
+- здесь же будут LVGL/EEZ и другие platform/UI адаптеры
+
+## Роли модулей
+
+- `host` не использует client-side transport как runtime-выход.
+- `client` держит transport/runtime для экранной стороны.
+- `ScreenSystem` остается host-side фасадом.
+
+Если в host-конфиге приходит `OutputType::WsClient`, `ScreenSystem::init(...)` возвращает ошибку:
+
+```text
+ws_client is client-side transport
+```
+
+## Быстрый сценарий интеграции (host)
+
+```cpp
+screenlib::ScreenSystem screens;
+
+char errBuf[160] = {};
+if (!screens.initFromJson(jsonConfig, errBuf, sizeof(errBuf))) {
+    // обработка ошибки
+}
+
+screens.setEventHandler(&onScreenEvent, nullptr);
+
+void loop() {
+    screens.tick();
+}
+```
+
+`ScreenSystem` сам поднимает runtime для активных host-выходов:
+
+- `uart` (через `UartLink`, модуль `adapter`)
+- `ws_server` (через `WebSocketServerLink`, модуль `host`)
+
+## Pages layer
+
+- Можно подключить `PageRegistry` через `ScreenSystem::setPageRegistry(...)`.
+- `showPage(pageId)` синхронизирует активную страницу registry после успешной отправки хотя бы в один endpoint.
+- Политика строгая: `PageRegistry` роутит `button_event/input_event` только если `event.page_id == currentPage()`.
 
 ## Сборка и тесты
 
@@ -29,51 +95,4 @@ pio run
 pio test -e esp32dev --without-uploading --without-testing
 ```
 
-## Конфиг
-
-`ScreenSystem` принимает типизированный `ScreenConfig` или JSON (`initFromJson`).
-
-Для `ws_client` используется поле `url`:
-
-```json
-{
-  "outputs": {
-    "web": {
-      "enabled": true,
-      "type": "ws_client",
-      "url": "ws://127.0.0.1:8181/ws"
-    }
-  },
-  "routing": {
-    "defaultTarget": "web"
-  }
-}
-```
-
-## Pages Layer
-
-- `ScreenManager::showPage(pageId)` после успешной отправки синхронизирует `PageRegistry::setCurrentPage(pageId)`, если registry подключен.
-- Если `showPage` не отправился ни в один endpoint, текущая страница registry не меняется.
-- Если registry подключен, но `pageId` не зарегистрирован, `showPage` вернет `false`.
-
-Политика роутинга событий (строгая):
-
-- `PageRegistry` обрабатывает только `button_event` и `input_event`.
-- Событие передается в активную страницу только если `event.page_id == currentPage()`.
-- События с чужим `page_id` игнорируются как устаревшие.
-
-## WsClient
-
-- Добавлен отдельный `link/WebSocketClientLink` (клиентский `ITransport`).
-- `WebSocketLink` (server-side) оставлен отдельным и не смешивается с клиентским transport.
-- `ScreenSystem` умеет bootstrap `OutputType::WsClient` для `physical` и `web`.
-
-## EMsdk/Demo Интеграция
-
-Рекомендуемый путь для `EMsdk/DEMO`:
-
-- Платформенный слой demo дает байтовый transport (read/write/tick).
-- Поверх transport работает тот же стек: `FrameCodec + ProtoCodec`.
-- UI-слой принимает `Envelope` и обновляет экран по `page_id/element_id/value`.
-- Прямые ad-hoc команды в UI-слое не используются.
-
+Текущий `src/main.cpp` оставлен как demo/bootstrap пример.

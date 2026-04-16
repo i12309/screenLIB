@@ -3,13 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../config/ScreenConfigJson.h"
-#include "../link/WebSocketClientLink.h"
-#include "../link/WebSocketLink.h"
+#include "config/ScreenConfigJson.h"
+#include "link/WebSocketServerLink.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
-#include "../link/UartLink.h"
+#include "link/UartLink.h"
 #endif
 
 namespace screenlib {
@@ -135,23 +134,15 @@ bool ScreenSystem::bootstrapRuntime(char* errBuf, size_t errBufSize) {
                 break;
             }
             case OutputType::WsServer: {
-                std::unique_ptr<WebSocketLink> ws(new WebSocketLink(_cfg.physical.wsServer.port));
+                std::unique_ptr<WebSocketServerLink> ws(new WebSocketServerLink(_cfg.physical.wsServer.port));
                 ws->begin();
                 _ownedPhysicalTransport = std::move(ws);
                 _ownedPhysicalBridge.reset(new ScreenBridge(*_ownedPhysicalTransport));
                 break;
             }
             case OutputType::WsClient:
-            {
-                std::unique_ptr<WebSocketClientLink> wsClient(new WebSocketClientLink());
-                if (!wsClient->begin(_cfg.physical.wsClient.url)) {
-                    setError("physical ws_client invalid url", errBuf, errBufSize);
-                    return false;
-                }
-                _ownedPhysicalTransport = std::move(wsClient);
-                _ownedPhysicalBridge.reset(new ScreenBridge(*_ownedPhysicalTransport));
-                break;
-            }
+                setError("ws_client is client-side transport", errBuf, errBufSize);
+                return false;
             case OutputType::None:
             default:
                 setError("physical output type is not set", errBuf, errBufSize);
@@ -163,7 +154,7 @@ bool ScreenSystem::bootstrapRuntime(char* errBuf, size_t errBufSize) {
     if (_cfg.web.enabled) {
         switch (_cfg.web.type) {
             case OutputType::WsServer: {
-                std::unique_ptr<WebSocketLink> ws(new WebSocketLink(_cfg.web.wsServer.port));
+                std::unique_ptr<WebSocketServerLink> ws(new WebSocketServerLink(_cfg.web.wsServer.port));
                 ws->begin();
                 _ownedWebTransport = std::move(ws);
                 _ownedWebBridge.reset(new ScreenBridge(*_ownedWebTransport));
@@ -187,16 +178,8 @@ bool ScreenSystem::bootstrapRuntime(char* errBuf, size_t errBufSize) {
                 break;
             }
             case OutputType::WsClient:
-            {
-                std::unique_ptr<WebSocketClientLink> wsClient(new WebSocketClientLink());
-                if (!wsClient->begin(_cfg.web.wsClient.url)) {
-                    setError("web ws_client invalid url", errBuf, errBufSize);
-                    return false;
-                }
-                _ownedWebTransport = std::move(wsClient);
-                _ownedWebBridge.reset(new ScreenBridge(*_ownedWebTransport));
-                break;
-            }
+                setError("ws_client is client-side transport", errBuf, errBufSize);
+                return false;
             case OutputType::None:
             default:
                 setError("web output type is not set", errBuf, errBufSize);

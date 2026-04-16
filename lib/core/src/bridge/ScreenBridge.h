@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../frame/FrameCodec.h"
-#include "../link/ITransport.h"
-#include "../proto/ProtoCodec.h"
+#include "frame/FrameCodec.h"
+#include "link/ITransport.h"
+#include "proto/ProtoCodec.h"
 
 // ============================================================
 // ScreenBridge — высокий message-level слой над байтовым линком.

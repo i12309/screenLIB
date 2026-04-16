@@ -9,7 +9,7 @@
 #include "manager/ScreenManager.h"
 #include "pages/PageRegistry.h"
 #include "proto/ProtoCodec.h"
-#include "screen/ScreenBridge.h"
+#include "bridge/ScreenBridge.h"
 #include "system/ScreenSystem.h"
 
 void setUp(void) {}
@@ -386,7 +386,7 @@ void test_page_registry_strict_policy_ignores_foreign_page_id() {
     TEST_ASSERT_EQUAL_INT(0, page2.envelopeCount);
 }
 
-void test_screen_system_init_web_ws_client() {
+void test_screen_system_rejects_web_ws_client_on_host_side() {
     screenlib::ScreenSystem screens;
 
     screenlib::ScreenConfig cfg{};
@@ -396,8 +396,8 @@ void test_screen_system_init_web_ws_client() {
     strncpy(cfg.web.wsClient.url, "ws://127.0.0.1:8181/ws", sizeof(cfg.web.wsClient.url) - 1);
     cfg.web.wsClient.url[sizeof(cfg.web.wsClient.url) - 1] = '\0';
 
-    TEST_ASSERT_TRUE(screens.init(cfg));
-    TEST_ASSERT_EQUAL_STRING("", screens.lastError());
+    TEST_ASSERT_FALSE(screens.init(cfg));
+    TEST_ASSERT_EQUAL_STRING("ws_client is client-side transport", screens.lastError());
 }
 
 void test_screen_system_mirror_mode_sends_to_both_endpoints() {
@@ -481,7 +481,7 @@ void run_all_tests() {
     RUN_TEST(test_screen_manager_show_page_syncs_registry_and_routes_to_new_page);
     RUN_TEST(test_screen_manager_show_page_failure_does_not_advance_registry);
     RUN_TEST(test_page_registry_strict_policy_ignores_foreign_page_id);
-    RUN_TEST(test_screen_system_init_web_ws_client);
+    RUN_TEST(test_screen_system_rejects_web_ws_client_on_host_side);
     RUN_TEST(test_screen_system_mirror_mode_sends_to_both_endpoints);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
 }

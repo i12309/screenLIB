@@ -3,23 +3,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "ITransport.h"
+#include "link/ITransport.h"
 
 #ifdef ARDUINO
 
 #include <WebSocketsServer.h>
 
 // ============================================================
-// WebSocketLink — серверный transport поверх WebSocketsServer.
+// WebSocketServerLink — серверный transport поверх WebSocketsServer.
 // Используется на ESP32 (экранный контроллер поднимает WS-сервер).
 // ============================================================
 static constexpr size_t kWsRxBufSize = 1024;
 static_assert((kWsRxBufSize & (kWsRxBufSize - 1)) == 0,
               "kWsRxBufSize must be a power of 2");
 
-class WebSocketLink : public ITransport {
+class WebSocketServerLink : public ITransport {
 public:
-    explicit WebSocketLink(uint16_t port = 81) : _ws(port) {}
+    explicit WebSocketServerLink(uint16_t port = 81) : _ws(port) {}
 
     void begin() {
         s_instance = this;
@@ -108,7 +108,7 @@ private:
         }
     }
 
-    static WebSocketLink* s_instance;
+    static WebSocketServerLink* s_instance;
 };
 
 #else
@@ -117,9 +117,9 @@ private:
 // Заглушка для host/native тестов.
 // На non-Arduino платформах WS transport не активен.
 // ============================================================
-class WebSocketLink : public ITransport {
+class WebSocketServerLink : public ITransport {
 public:
-    explicit WebSocketLink(uint16_t port = 81) : _port(port) {}
+    explicit WebSocketServerLink(uint16_t port = 81) : _port(port) {}
 
     void begin() {}
 
@@ -141,4 +141,3 @@ private:
 };
 
 #endif
-

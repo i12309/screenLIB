@@ -1,0 +1,11 @@
+{
+  "name": "screenlib-core",
+  "version": "0.1.0",
+  "description": "Core protocol and bridge layer for screenLIB.",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "build": {
+    "includeDir": "src"
+  }
+}
+

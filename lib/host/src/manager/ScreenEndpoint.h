@@ -3,8 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../config/ScreenTypes.h"
-#include "../screen/ScreenBridge.h"
+#include "types/ScreenTypes.h"
+#include "bridge/ScreenBridge.h"
 
 namespace screenlib {
 
@@ -63,4 +63,3 @@ private:
 };
 
 }  // namespace screenlib
-

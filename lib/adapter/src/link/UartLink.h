@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "ITransport.h"
+#include "link/ITransport.h"
 
 // ============================================================
 // UartLink — реализация ITransport поверх HardwareSerial.

@@ -4,10 +4,10 @@
 #include <stdint.h>
 #include <memory>
 
-#include "../config/ScreenConfig.h"
-#include "../manager/ScreenManager.h"
-#include "../link/ITransport.h"
-#include "../screen/ScreenBridge.h"
+#include "config/ScreenConfig.h"
+#include "manager/ScreenManager.h"
+#include "link/ITransport.h"
+#include "bridge/ScreenBridge.h"
 
 namespace screenlib {
 

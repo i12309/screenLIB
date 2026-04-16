@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "ScreenTypes.h"
+#include "types/ScreenTypes.h"
 
 namespace screenlib {
 
@@ -41,4 +41,3 @@ struct ScreenConfig {
 };
 
 }  // namespace screenlib
-

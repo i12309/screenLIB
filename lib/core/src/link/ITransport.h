@@ -6,7 +6,7 @@
 // ============================================================
 // ITransport — абстракция байтового транспорта.
 // Не знает ничего про protobuf, framing, UI или команды.
-// Реализации: UartLink (физический UART) и WebSocketLink (WS).
+// Реализации: UartLink (adapter), WebSocketServerLink (host) и WebSocketClientLink (client).
 // ============================================================
 
 class ITransport {
