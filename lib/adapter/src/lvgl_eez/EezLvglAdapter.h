@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/IUiAdapter.h"
+#include "lvgl_eez/IUiAdapter.h"
 
 namespace screenlib::adapter {
 
@@ -30,6 +30,29 @@ public:
         (void)visible;
         return false;
     }
+
+    bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) override {
+        (void)elementId;
+        (void)bgColor;
+        (void)fgColor;
+        return false;
+    }
+
+    bool applyBatch(const SetBatch& batch) override {
+        (void)batch;
+        return false;
+    }
+
+    void setEventSink(EventSink sink, void* userData) override {
+        _sink = sink;
+        _sinkUser = userData;
+    }
+
+    void tickInput() override {}
+
+private:
+    EventSink _sink = nullptr;
+    void* _sinkUser = nullptr;
 };
 
 }  // namespace screenlib::adapter

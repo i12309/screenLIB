@@ -40,14 +40,14 @@ lib/
 ### `client`
 
 - `link/WebSocketClientLink.h/.cpp`
-- `runtime/ScreenClient.h` (каркас)
-- `runtime/CommandDispatcher.h` (каркас)
+- `runtime/ScreenClient.h/.cpp`
+- `runtime/CommandDispatcher.h/.cpp`
 
 ### `adapter`
 
-- `ui/IUiAdapter.h`
-- `ui/EezLvglAdapter.h` (заготовка)
-- `ui/UiObjectMap.h` (mapping `element_id -> UI object`)
+- `lvgl_eez/IUiAdapter.h`
+- `lvgl_eez/EezLvglAdapter.h` (заготовка)
+- `lvgl_eez/UiObjectMap.h` (mapping `element_id -> UI object`)
 - здесь же будут LVGL/EEZ и другие UI/platform adapters
 
 ## Роли модулей

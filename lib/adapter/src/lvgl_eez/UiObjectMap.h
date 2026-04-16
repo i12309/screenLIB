@@ -5,7 +5,7 @@
 
 namespace screenlib::adapter {
 
-// Заготовка для mapping element_id -> UI object pointer.
+// Заготовка для mapping element_id -> UI object pointer (LVGL/EEZ).
 // Конкретный тип uiObject зависит от выбранного UI runtime (LVGL/EEZ и т.д.).
 struct UiObjectBinding {
     uint32_t elementId = 0;
