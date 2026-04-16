@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../config/ScreenConfigJson.h"
+#include "../link/WebSocketClientLink.h"
 #include "../link/WebSocketLink.h"
 
 #ifdef ARDUINO
@@ -141,8 +142,16 @@ bool ScreenSystem::bootstrapRuntime(char* errBuf, size_t errBufSize) {
                 break;
             }
             case OutputType::WsClient:
-                setError("physical ws_client not implemented yet", errBuf, errBufSize);
-                return false;
+            {
+                std::unique_ptr<WebSocketClientLink> wsClient(new WebSocketClientLink());
+                if (!wsClient->begin(_cfg.physical.wsClient.url)) {
+                    setError("physical ws_client invalid url", errBuf, errBufSize);
+                    return false;
+                }
+                _ownedPhysicalTransport = std::move(wsClient);
+                _ownedPhysicalBridge.reset(new ScreenBridge(*_ownedPhysicalTransport));
+                break;
+            }
             case OutputType::None:
             default:
                 setError("physical output type is not set", errBuf, errBufSize);
@@ -178,8 +187,16 @@ bool ScreenSystem::bootstrapRuntime(char* errBuf, size_t errBufSize) {
                 break;
             }
             case OutputType::WsClient:
-                setError("web ws_client not implemented yet", errBuf, errBufSize);
-                return false;
+            {
+                std::unique_ptr<WebSocketClientLink> wsClient(new WebSocketClientLink());
+                if (!wsClient->begin(_cfg.web.wsClient.url)) {
+                    setError("web ws_client invalid url", errBuf, errBufSize);
+                    return false;
+                }
+                _ownedWebTransport = std::move(wsClient);
+                _ownedWebBridge.reset(new ScreenBridge(*_ownedWebTransport));
+                break;
+            }
             case OutputType::None:
             default:
                 setError("web output type is not set", errBuf, errBufSize);
