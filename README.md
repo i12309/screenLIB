@@ -33,7 +33,22 @@ pio run
 pio device monitor
 ```
 
+## Тесты
+
+В проекте добавлены unit-тесты: `test/test_screenlib_core/test_main.cpp`.
+
+Проверка компиляции тестов без загрузки на плату:
+
+```bash
+pio test -e esp32dev --without-uploading --without-testing
+```
+
+Запуск тестов на реальной плате:
+
+```bash
+pio test -e esp32dev --test-port <PORT>
+```
+
 ## Конфиг
 
 Тестовый JSON-конфиг находится в `src/main.cpp` (`kScreenConfigJson`).
-
