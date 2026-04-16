@@ -1,16 +1,11 @@
 #include <Arduino.h>
 
-#include "config/ScreenConfig.h"
-#include "config/ScreenConfigJson.h"
-#include "link/UartLink.h"
-#include "link/WebSocketLink.h"
-#include "screen/ScreenBridge.h"
 #include "system/ScreenSystem.h"
 
 namespace {
 
 // Пример JSON-конфига для библиотеки.
-// Сейчас включен только web-выход (WS server), physical отключен.
+// Bootstrap transport/bridge выполняет сам ScreenSystem.
 constexpr const char* kScreenConfigJson = R"json(
 {
   "outputs": {
@@ -33,16 +28,7 @@ constexpr const char* kScreenConfigJson = R"json(
 }
 )json";
 
-HardwareSerial kScreenUart(1);
-
-UartLink gPhysicalTransport(kScreenUart);
-WebSocketLink gWebTransport(81);
-
-ScreenBridge gPhysicalBridge(gPhysicalTransport);
-ScreenBridge gWebBridge(gWebTransport);
-
 screenlib::ScreenSystem gScreens;
-screenlib::ScreenConfig gConfig;
 
 uint32_t gLastHeartbeatMs = 0;
 uint32_t gLastDemoTextMs = 0;
@@ -57,47 +43,20 @@ void onScreenEvent(const Envelope& env, const screenlib::ScreenEventContext& ctx
                   static_cast<unsigned>(env.which_payload));
 }
 
-void initTransportsFromConfig(const screenlib::ScreenConfig& cfg) {
-    if (cfg.physical.enabled && cfg.physical.type == screenlib::OutputType::Uart) {
-        UartLink::Config uartCfg{};
-        uartCfg.baud = cfg.physical.uart.baud;
-        uartCfg.rxPin = cfg.physical.uart.rxPin;
-        uartCfg.txPin = cfg.physical.uart.txPin;
-        gPhysicalTransport.begin(uartCfg);
-        Serial.printf("[screen] physical uart started: baud=%lu rx=%d tx=%d\n",
-                      static_cast<unsigned long>(uartCfg.baud),
-                      static_cast<int>(uartCfg.rxPin),
-                      static_cast<int>(uartCfg.txPin));
-    }
-
-    if (cfg.web.enabled && cfg.web.type == screenlib::OutputType::WsServer) {
-        gWebTransport.begin();
-        Serial.printf("[screen] web ws server started: port=%u\n",
-                      static_cast<unsigned>(cfg.web.wsServer.port));
-    }
-}
-
 }  // namespace
 
 void setup() {
     Serial.begin(115200);
     delay(200);
 
-    char errBuf[128] = {};
-    if (!screenlib::ScreenConfigJson::parse(kScreenConfigJson, gConfig, errBuf, sizeof(errBuf))) {
-        Serial.printf("[screen] config parse failed: %s\n", errBuf);
+    char errBuf[160] = {};
+    if (!gScreens.initFromJson(kScreenConfigJson, errBuf, sizeof(errBuf))) {
+        Serial.printf("[screen] initFromJson failed: %s\n", errBuf);
         return;
     }
 
-    initTransportsFromConfig(gConfig);
-
-    // Инициализируем систему и привязываем endpoint-bridge.
-    gScreens.init(gConfig);
-    gScreens.bindPhysicalBridge(&gPhysicalBridge);
-    gScreens.bindWebBridge(&gWebBridge);
     gScreens.setEventHandler(&onScreenEvent, nullptr);
 
-    // Тестовая команда в UI.
     gScreens.showPage(1);
     gScreens.setText(100, "screenLIB started");
 
@@ -109,13 +68,11 @@ void loop() {
 
     const uint32_t now = millis();
 
-    // Периодический heartbeat.
     if (now - gLastHeartbeatMs >= 1000) {
         gLastHeartbeatMs = now;
         gScreens.sendHeartbeat(now);
     }
 
-    // Тестовое обновление элемента раз в 2 секунды.
     if (now - gLastDemoTextMs >= 2000) {
         gLastDemoTextMs = now;
         gCounter++;
@@ -128,3 +85,4 @@ void loop() {
 
     delay(5);
 }
+
