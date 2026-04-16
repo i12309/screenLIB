@@ -34,6 +34,7 @@ lib/
 - `pages/IPageController*`
 - `pages/PageRegistry*`
 - `system/ScreenSystem*`
+- `link/UartLink*`
 - `link/WebSocketServerLink*`
 
 ### `client`
@@ -41,17 +42,19 @@ lib/
 - `link/WebSocketClientLink.h/.cpp`
 - `runtime/ScreenClient.h` (каркас)
 - `runtime/CommandDispatcher.h` (каркас)
-- `ui/IUiAdapter.h` (каркас)
 
 ### `adapter`
 
-- `link/UartLink.h`
-- здесь же будут LVGL/EEZ и другие platform/UI адаптеры
+- `ui/IUiAdapter.h`
+- `ui/EezLvglAdapter.h` (заготовка)
+- `ui/UiObjectMap.h` (mapping `element_id -> UI object`)
+- здесь же будут LVGL/EEZ и другие UI/platform adapters
 
 ## Роли модулей
 
 - `host` не использует client-side transport как runtime-выход.
 - `client` держит transport/runtime для экранной стороны.
+- `adapter` отвечает только за UI-адаптеры и mapping к конкретному UI runtime.
 - `ScreenSystem` остается host-side фасадом.
 
 Если в host-конфиге приходит `OutputType::WsClient`, `ScreenSystem::init(...)` возвращает ошибку:
@@ -79,7 +82,7 @@ void loop() {
 
 `ScreenSystem` сам поднимает runtime для активных host-выходов:
 
-- `uart` (через `UartLink`, модуль `adapter`)
+- `uart` (через `UartLink`, модуль `host`)
 - `ws_server` (через `WebSocketServerLink`, модуль `host`)
 
 ## Pages layer

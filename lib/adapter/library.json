@@ -1,11 +1,10 @@
 {
   "name": "screenlib-adapter",
   "version": "0.1.0",
-  "description": "Platform and UI adapters for screenLIB.",
+  "description": "UI adapter layer for LVGL/EEZ and other screen runtimes.",
   "frameworks": ["arduino"],
   "platforms": ["espressif32"],
   "build": {
     "includeDir": "src"
   }
 }
-

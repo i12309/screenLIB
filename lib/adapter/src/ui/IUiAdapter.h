@@ -2,9 +2,9 @@
 
 #include <stdint.h>
 
-namespace screenlib::client {
+namespace screenlib::adapter {
 
-// TODO: интерфейс UI-адаптера (LVGL/EEZ/другие UI runtime).
+// Базовый UI-адаптер: отображение message-level команд на конкретный UI runtime.
 class IUiAdapter {
 public:
     virtual ~IUiAdapter() = default;
@@ -15,5 +15,4 @@ public:
     virtual bool setVisible(uint32_t elementId, bool visible) = 0;
 };
 
-}  // namespace screenlib::client
-
+}  // namespace screenlib::adapter
