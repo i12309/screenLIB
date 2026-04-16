@@ -1,0 +1,26 @@
+# ============================================================
+# machine.options — ограничения для nanopb (статическая память).
+# Без этого файла nanopb не знает сколько выделить под строки
+# и repeated-поля, и не скомпилирует код.
+#
+# Синтаксис: MessageName.field_name  max_size:N  или  max_count:N
+# ============================================================
+
+# Строки: максимум 32 байта (включая \0).
+# Достаточно для UI-текстов. Сознательно уменьшено с 64:
+# SetBatch с 8 * 64-байтными строками уже превышал kMaxPayload=512.
+SetText.text                    max_size:32
+InputEvent.string_value         max_size:32
+
+# SetBatch: максимум 8 элементов каждого типа.
+# Расчёт худшего случая при max_size=32 и max_count=8:
+#   texts:    8 * (4 + 32) = ~288 байт
+#   colors:   8 * 12       =  ~96 байт
+#   visibles: 8 * 5        =  ~40 байт
+#   values:   8 * 8        =  ~64 байт
+# Итого: ~490 байт payload — помещается в kMaxPayload=1024 с запасом.
+# Если нужно обновить больше 8 элементов — разбить на два сообщения.
+SetBatch.texts                  max_count:8
+SetBatch.colors                 max_count:8
+SetBatch.visibles               max_count:8
+SetBatch.values                 max_count:8
