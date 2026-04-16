@@ -58,6 +58,21 @@ lib/
 - `adapter` отвечает только за UI-адаптеры и mapping к конкретному UI runtime.
 - `ScreenSystem` остается host-side фасадом.
 
+## Client Runtime
+
+`ScreenClient` — runtime экранной стороны (screen-side), отдельный от `ScreenSystem`.
+
+- Принимает входящие `Envelope` команды через `ScreenBridge` и применяет их в `IUiAdapter`.
+- Отправляет обратно только пользовательские события: `button_event` и `input_event`.
+- `init()` идемпотентный: повторный вызов безопасен.
+- UI-адаптер можно подключать/менять через `setUiAdapter(...)`.
+
+Минимальная цепочка:
+
+```text
+ITransport -> ScreenClient -> IUiAdapter
+```
+
 Если в host-конфиге приходит `OutputType::WsClient`, `ScreenSystem::init(...)` возвращает ошибку:
 
 ```text

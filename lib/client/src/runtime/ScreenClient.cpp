@@ -25,6 +25,10 @@ void ScreenClient::setUiAdapter(screenlib::adapter::IUiAdapter* uiAdapter) {
 }
 
 void ScreenClient::init() {
+    if (_initialized) {
+        return;
+    }
+
     _bridge.setEnvelopeHandler(&ScreenClient::onBridgeEnvelopeStatic, this);
 
     if (_uiAdapter != nullptr) {
@@ -125,6 +129,13 @@ bool ScreenClient::onUiEventStatic(const Envelope& env, void* userData) {
 }
 
 bool ScreenClient::onUiEvent(const Envelope& env) {
+    // Наружу пропускаем только пользовательские события экрана.
+    // Любые другие payload от UI-адаптера игнорируем.
+    if (env.which_payload != Envelope_button_event_tag &&
+        env.which_payload != Envelope_input_event_tag) {
+        return false;
+    }
+
     return enqueueUiEvent(env);
 }
 
@@ -154,12 +165,6 @@ bool ScreenClient::flushUiEvents() {
     }
 
     return allSent;
-}
-
-void ScreenClient::clearUiEvents() {
-    _uiEventHead = 0;
-    _uiEventTail = 0;
-    _uiEventCount = 0;
 }
 
 bool ScreenClient::sendOutgoingEnvelope(const Envelope& env) {

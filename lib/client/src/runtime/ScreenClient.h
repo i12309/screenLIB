@@ -30,6 +30,7 @@ public:
     void setUiAdapter(screenlib::adapter::IUiAdapter* uiAdapter);
 
     // Инициализировать runtime связи bridge <-> client <-> adapter.
+    // Метод идемпотентный: повторный вызов безопасен и не меняет состояние.
     void init();
 
     // Главный цикл экранной стороны.
@@ -72,7 +73,6 @@ private:
 
     bool enqueueUiEvent(const Envelope& env);
     bool flushUiEvents();
-    void clearUiEvents();
 
     bool sendOutgoingEnvelope(const Envelope& env);
 
