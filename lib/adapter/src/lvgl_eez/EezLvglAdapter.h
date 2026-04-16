@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lvgl_eez/IUiAdapter.h"
+#include "IUiAdapter.h"
 
 namespace screenlib::adapter {
 

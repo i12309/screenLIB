@@ -45,10 +45,11 @@ lib/
 
 ### `adapter`
 
-- `lvgl_eez/IUiAdapter.h`
+- `IUiAdapter.h` (общий контракт для client runtime)
 - `lvgl_eez/EezLvglAdapter.h` (заготовка)
 - `lvgl_eez/UiObjectMap.h` (mapping `element_id -> UI object`)
-- здесь же будут LVGL/EEZ и другие UI/platform adapters
+- `lvgl_eez/` содержит конкретную реализацию адаптера под LVGL/EEZ
+- здесь же будут другие UI/platform adapters
 
 ## Роли модулей
 
