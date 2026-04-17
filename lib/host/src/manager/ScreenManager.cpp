@@ -41,18 +41,7 @@ bool ScreenManager::connectedWeb() const {
 }
 
 bool ScreenManager::showPage(uint32_t pageId) {
-    const bool sent = sendShowPageByMode(pageId);
-    if (!sent) {
-        return false;
-    }
-
-    // Синхронизируем registry только после успешной отправки showPage.
-    // Если страница не зарегистрирована, возвращаем false, чтобы не молча разойтись по состоянию.
-    if (_pageRegistry != nullptr) {
-        return _pageRegistry->setCurrentPage(pageId);
-    }
-
-    return true;
+    return sendShowPageByMode(pageId);
 }
 
 bool ScreenManager::setText(uint32_t elementId, const char* text) {
@@ -96,11 +85,8 @@ void ScreenManager::onEndpointEvent(const Envelope& env, const ScreenEventContex
 }
 
 void ScreenManager::handleEndpointEvent(const Envelope& env, const ScreenEventContext& ctx) {
-    if (_pageRegistry != nullptr) {
-        _pageRegistry->dispatchEnvelope(env, ctx);
-    }
-
-    // Важно: callback также вызывается синхронно из tick().
+    // Маршрутизация событий в активную страницу выполняется в SinglePageRuntime
+    // через установленный setEventHandler — здесь только пробрасываем наружу.
     if (_eventHandler != nullptr) {
         _eventHandler(env, ctx, _eventUser);
     }

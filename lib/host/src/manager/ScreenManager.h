@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 #include "../config/ScreenConfig.h"
-#include "../pages/PageRegistry.h"
 #include "ScreenEndpoint.h"
 
 namespace screenlib {
@@ -34,9 +33,6 @@ public:
         _eventUser = userData;
     }
 
-    // Опциональный pages-роутер для активной страницы.
-    void setPageRegistry(PageRegistry* registry) { _pageRegistry = registry; }
-
     // High-level команды экрана.
     bool showPage(uint32_t pageId);
     bool setText(uint32_t elementId, const char* text);
@@ -57,7 +53,6 @@ private:
 
     EventHandler _eventHandler = nullptr;
     void* _eventUser = nullptr;
-    PageRegistry* _pageRegistry = nullptr;
 
     // Общий callback endpoint -> manager.
     static void onEndpointEvent(const Envelope& env, const ScreenEventContext& ctx, void* userData);

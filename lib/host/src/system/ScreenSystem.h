@@ -38,7 +38,6 @@ public:
     const char* lastError() const { return _lastError; }
 
     void setEventHandler(EventHandler handler, void* userData = nullptr);
-    void setPageRegistry(PageRegistry* registry);
 
     // High-level API для бизнес-логики.
     bool showPage(uint32_t pageId);
