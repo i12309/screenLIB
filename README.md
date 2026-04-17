@@ -1,23 +1,28 @@
 ﻿# screenLIB
 
-`screenLIB` is the protocol/runtime repository.
+`screenLIB` — репозиторий протокола и runtime-слоев.
 
-It contains only transport/protocol/runtime layers and shared abstractions:
-- `core`: `ITransport`, frame/proto codecs, protobuf schema (`machine.proto`, `machine.pb.*`), `ScreenBridge`.
-- `host`: host-side runtime (`ScreenSystem`, `ScreenManager`, `ScreenEndpoint`, page registry/controllers, host transports).
-- `client`: screen-side protocol runtime (`ScreenClient`, `CommandDispatcher`, client transports).
-- `adapter`: API only (`IUiAdapter`).
+Он содержит только транспорт, протокол, runtime и общие абстракции:
+- `core`: `ITransport`, frame/proto codec, protobuf-схемы (`machine.proto`, `machine.pb.*`), `ScreenBridge`;
+- `host`: host-side runtime (`ScreenSystem`, `ScreenManager`, `ScreenEndpoint`, page registry/controllers, host transports);
+- `client`: screen-side protocol runtime (`ScreenClient`, `CommandDispatcher`, client transports);
+- `adapter`: только API (`IUiAdapter`).
 
-It does not contain concrete frontend UI integrations (LVGL/EEZ adapter, generated frontend UI, UI object maps, UI generators).
-Those belong to the `ScreenUI` repository.
+В этом репозитории не должно быть concrete frontend UI-интеграций:
+- LVGL/EEZ adapter;
+- generated frontend UI;
+- object map;
+- UI generators.
 
-## Boundaries
+Все эти части принадлежат репозиторию `ScreenUI`.
 
-- Keep `screenLIB` UI-framework agnostic.
-- `client` depends on `IUiAdapter` interface only.
-- Concrete adapter implementations are external dependencies.
+## Границы ответственности
 
-## Build and Tests
+- `screenLIB` должен оставаться независимым от конкретного UI framework.
+- `client` может зависеть только от интерфейса `IUiAdapter`.
+- Concrete adapter implementation подключается снаружи.
+
+## Сборка и тесты
 
 ```bash
 pio run
