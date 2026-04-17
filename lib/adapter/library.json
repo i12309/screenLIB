@@ -1,7 +1,7 @@
 {
   "name": "screenlib-adapter",
   "version": "0.1.0",
-  "description": "UI adapter layer for LVGL/EEZ and other screen runtimes.",
+  "description": "UI adapter API contract (IUiAdapter) for screen-side runtime.",
   "frameworks": ["arduino"],
   "platforms": ["espressif32"],
   "build": {
