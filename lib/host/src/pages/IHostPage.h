@@ -40,6 +40,7 @@ protected:
     // Жизненный цикл страницы. Вызываются runtime'ом при navigate<T>().
     virtual void onShow() {}
     virtual void onClose() {}
+    virtual void onTick() {}
 
     // Точки входа для событий с экрана. Сгенерированный base обычно
     // переопределяет onButton/onInput и диспатчит в типизированные хендлеры

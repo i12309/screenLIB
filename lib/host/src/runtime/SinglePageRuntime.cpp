@@ -25,6 +25,9 @@ void SinglePageRuntime::tick() {
         return;
     }
     _screens.tick();
+    if (_current) {
+        _current->onTick();
+    }
 }
 
 void SinglePageRuntime::onScreenEvent(const Envelope& env,
