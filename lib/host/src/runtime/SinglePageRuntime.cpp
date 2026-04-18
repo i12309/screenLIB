@@ -79,10 +79,28 @@ void SinglePageRuntime::dispatch(const Envelope& env, const ScreenEventContext& 
     }
 }
 
-bool SinglePageRuntime::swapCurrent(std::unique_ptr<IHostPage> next) {
+// Возвращает runtime на предыдущую страницу, если она была сохранена.
+bool SinglePageRuntime::back() {
+    if (_previousFactory == nullptr) {
+        return false;
+    }
+
+    PageFactory previousFactory = _previousFactory;
+    _previousFactory = nullptr;
+    const bool opened = swapCurrent(previousFactory(), previousFactory);
+    if (opened) {
+        _previousFactory = nullptr;
+    }
+    return opened;
+}
+
+// Закрывает текущую страницу и открывает новую, сохраняя предыдущую для back().
+bool SinglePageRuntime::swapCurrent(std::unique_ptr<IHostPage> next, PageFactory nextFactory) {
     if (!next) {
         return false;
     }
+
+    _previousFactory = _currentFactory;
 
     if (_current) {
         _current->onClose();
@@ -91,6 +109,7 @@ bool SinglePageRuntime::swapCurrent(std::unique_ptr<IHostPage> next) {
 
     next->_runtime = this;
     _current = std::move(next);
+    _currentFactory = nextFactory;
 
     if (_initialized) {
         _screens.showPage(_current->pageId());

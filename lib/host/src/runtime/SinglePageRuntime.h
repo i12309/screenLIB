@@ -17,6 +17,8 @@ namespace screenlib {
 // создаётся новая, onShow. Никакой регистрации страниц не требуется.
 class SinglePageRuntime {
 public:
+    // Фабрика страницы для системного возврата на предыдущий экран.
+    using PageFactory = std::unique_ptr<IHostPage> (*)();
     using EventObserver = void (*)(const Envelope& env, const ScreenEventContext& ctx, void* userData);
 
     bool init(const ScreenConfig& cfg);
@@ -37,9 +39,11 @@ public:
     bool navigateTo() {
         static_assert(std::is_base_of<IHostPage, T>::value,
                       "navigate target must inherit from screenlib::IHostPage");
-        std::unique_ptr<IHostPage> next(new T());
-        return swapCurrent(std::move(next));
+        return swapCurrent(makePage<T>(), &makePage<T>);
     }
+
+    // Возвращает предыдущую страницу, если она была сохранена runtime.
+    bool back();
 
     // Текущая страница (может быть nullptr, если runtime в "тихом" режиме).
     IHostPage* current() const { return _current.get(); }
@@ -59,12 +63,20 @@ public:
     bool setVisible(uint32_t elementId, bool visible)    { return _screens.setVisible(elementId, visible); }
 
 private:
+    // Создает экземпляр страницы указанного типа.
+    template <typename T>
+    static std::unique_ptr<IHostPage> makePage() {
+        return std::unique_ptr<IHostPage>(new T());
+    }
+
     static void onScreenEvent(const Envelope& env, const ScreenEventContext& ctx, void* userData);
     void dispatch(const Envelope& env, const ScreenEventContext& ctx);
-    bool swapCurrent(std::unique_ptr<IHostPage> next);
+    bool swapCurrent(std::unique_ptr<IHostPage> next, PageFactory nextFactory);
 
     ScreenSystem _screens;
     std::unique_ptr<IHostPage> _current;
+    PageFactory _currentFactory = nullptr;
+    PageFactory _previousFactory = nullptr;
     bool _initialized = false;
     EventObserver _eventObserver = nullptr;
     void* _eventObserverUser = nullptr;
