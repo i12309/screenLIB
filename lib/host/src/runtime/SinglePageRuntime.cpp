@@ -78,7 +78,7 @@ bool SinglePageRuntime::swapCurrent(std::unique_ptr<IHostPage> next) {
     }
 
     if (_current) {
-        _current->onExit();
+        _current->onClose();
         _current.reset();
     }
 
@@ -88,7 +88,7 @@ bool SinglePageRuntime::swapCurrent(std::unique_ptr<IHostPage> next) {
     if (_initialized) {
         _screens.showPage(_current->pageId());
     }
-    _current->onEnter();
+    _current->onShow();
     return true;
 }
 

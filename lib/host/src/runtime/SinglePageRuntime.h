@@ -13,8 +13,8 @@ namespace screenlib {
 
 // SinglePageRuntime — модель "одна живая страница".
 // В каждый момент времени существует ровно один экземпляр IHostPage.
-// Переход выполняется через navigate<T>(): старая onExit, удаляется,
-// создаётся новая, onEnter. Никакой регистрации страниц не требуется.
+// Переход выполняется через navigate<T>(): старая onClose, удаляется,
+// создаётся новая, onShow. Никакой регистрации страниц не требуется.
 class SinglePageRuntime {
 public:
     bool init(const ScreenConfig& cfg);
