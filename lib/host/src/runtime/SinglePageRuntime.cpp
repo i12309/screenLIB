@@ -37,6 +37,10 @@ void SinglePageRuntime::onScreenEvent(const Envelope& env,
 }
 
 void SinglePageRuntime::dispatch(const Envelope& env, const ScreenEventContext& ctx) {
+    if (_eventObserver != nullptr) {
+        _eventObserver(env, ctx, _eventObserverUser);
+    }
+
     (void)ctx;
     if (!_current) {
         return;

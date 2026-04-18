@@ -17,8 +17,14 @@ namespace screenlib {
 // создаётся новая, onShow. Никакой регистрации страниц не требуется.
 class SinglePageRuntime {
 public:
+    using EventObserver = void (*)(const Envelope& env, const ScreenEventContext& ctx, void* userData);
+
     bool init(const ScreenConfig& cfg);
     void tick();
+    void setEventObserver(EventObserver observer, void* userData = nullptr) {
+        _eventObserver = observer;
+        _eventObserverUser = userData;
+    }
 
     // Стартовая страница. Эквивалентно navigate<T>().
     template <typename T>
@@ -60,6 +66,8 @@ private:
     ScreenSystem _screens;
     std::unique_ptr<IHostPage> _current;
     bool _initialized = false;
+    EventObserver _eventObserver = nullptr;
+    void* _eventObserverUser = nullptr;
 };
 
 // Реализация навигации из страницы — определяется здесь, чтобы template
