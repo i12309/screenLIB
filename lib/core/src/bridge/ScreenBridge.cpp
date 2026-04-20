@@ -1,19 +1,12 @@
 #include "ScreenBridge.h"
 
 #include <string.h>
-#include <stdio.h>
 
-#ifndef SCREENLIB_TRACE
-#define SCREENLIB_TRACE 0
-#endif
-
-#if SCREENLIB_TRACE
-#define SCREENLIB_TRACEF(...) printf(__VA_ARGS__)
-#else
-#define SCREENLIB_TRACEF(...) ((void)0)
-#endif
+#include "log/ScreenLibLogger.h"
 
 namespace {
+
+constexpr const char* kBridgeLogTag = "screenlib.bridge";
 
 const char* screenlib_payload_name(pb_size_t tag) {
     switch (tag) {
@@ -44,18 +37,20 @@ const char* screenlib_payload_name(pb_size_t tag) {
 bool ScreenBridge::sendEnvelope(const Envelope& env) {
     const size_t protoLen = ProtoCodec::encode(env, _protoTxBuf, sizeof(_protoTxBuf));
     if (protoLen == 0) {
-        SCREENLIB_TRACEF("[screenlib][bridge] tx encode failed payload=%s(%u)\n",
-                         screenlib_payload_name(env.which_payload),
-                         static_cast<unsigned>(env.which_payload));
+        SCREENLIB_LOGW(kBridgeLogTag,
+                       "tx encode failed payload=%s(%u)",
+                       screenlib_payload_name(env.which_payload),
+                       static_cast<unsigned>(env.which_payload));
         return false;
     }
 
     const bool ok = sendFramePayload(_protoTxBuf, protoLen);
-    SCREENLIB_TRACEF("[screenlib][bridge] tx payload=%s(%u) proto=%u status=%s\n",
-                     screenlib_payload_name(env.which_payload),
-                     static_cast<unsigned>(env.which_payload),
-                     static_cast<unsigned>(protoLen),
-                     ok ? "ok" : "fail");
+    SCREENLIB_LOGT(kBridgeLogTag,
+                   "tx payload=%s(%u) proto=%u status=%s",
+                   screenlib_payload_name(env.which_payload),
+                   static_cast<unsigned>(env.which_payload),
+                   static_cast<unsigned>(protoLen),
+                   ok ? "ok" : "fail");
     return ok;
 }
 
@@ -69,7 +64,7 @@ size_t ScreenBridge::processIncoming() {
     if (nowConnected != _lastConnected) {
         _frameCodec.reset();
         _lastConnected = nowConnected;
-        SCREENLIB_TRACEF("[screenlib][bridge] link %s\n", nowConnected ? "up" : "down");
+        SCREENLIB_LOGI(kBridgeLogTag, "link %s", nowConnected ? "up" : "down");
     }
     if (!nowConnected) {
         return 0;
@@ -88,16 +83,18 @@ size_t ScreenBridge::processIncoming() {
         while (_frameCodec.popFrame(frame)) {
             Envelope env{};
             if (!ProtoCodec::decode(frame.payload, frame.payloadLen, env)) {
-                SCREENLIB_TRACEF("[screenlib][bridge] rx decode failed payload_len=%u seq=%u\n",
-                                 static_cast<unsigned>(frame.payloadLen),
-                                 static_cast<unsigned>(frame.seq));
+                SCREENLIB_LOGW(kBridgeLogTag,
+                               "rx decode failed payload_len=%u seq=%u",
+                               static_cast<unsigned>(frame.payloadLen),
+                               static_cast<unsigned>(frame.seq));
                 continue;
             }
-            SCREENLIB_TRACEF("[screenlib][bridge] rx payload=%s(%u) payload_len=%u seq=%u\n",
-                             screenlib_payload_name(env.which_payload),
-                             static_cast<unsigned>(env.which_payload),
-                             static_cast<unsigned>(frame.payloadLen),
-                             static_cast<unsigned>(frame.seq));
+            SCREENLIB_LOGT(kBridgeLogTag,
+                           "rx payload=%s(%u) payload_len=%u seq=%u",
+                           screenlib_payload_name(env.which_payload),
+                           static_cast<unsigned>(env.which_payload),
+                           static_cast<unsigned>(frame.payloadLen),
+                           static_cast<unsigned>(frame.seq));
             dispatchEnvelope(env);
             processed++;
         }

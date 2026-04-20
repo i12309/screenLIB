@@ -1,18 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <stdio.h>
 #include "link/ITransport.h"
-
-#ifndef SCREENLIB_TRACE
-#define SCREENLIB_TRACE 0
-#endif
-
-#if SCREENLIB_TRACE
-#define SCREENLIB_TRACEF(...) printf(__VA_ARGS__)
-#else
-#define SCREENLIB_TRACEF(...) ((void)0)
-#endif
+#include "log/ScreenLibLogger.h"
 
 // ============================================================
 // UartLink — host-side реализация ITransport поверх HardwareSerial.
@@ -37,19 +27,21 @@ public:
             _serial.begin(cfg.baud);
         }
         _ready = true;
-        SCREENLIB_TRACEF("[screenlib][uart] begin baud=%lu rx=%d tx=%d explicit_pins=%d\n",
-                         static_cast<unsigned long>(cfg.baud),
-                         static_cast<int>(cfg.rxPin),
-                         static_cast<int>(cfg.txPin),
-                         (cfg.rxPin >= 0 && cfg.txPin >= 0) ? 1 : 0);
+        SCREENLIB_LOGI("screenlib.uart",
+                       "begin baud=%lu rx=%d tx=%d explicit_pins=%d",
+                       static_cast<unsigned long>(cfg.baud),
+                       static_cast<int>(cfg.rxPin),
+                       static_cast<int>(cfg.txPin),
+                       (cfg.rxPin >= 0 && cfg.txPin >= 0) ? 1 : 0);
     }
 
     // Инициализация с дефолтными пинами.
     void begin(uint32_t baud = 115200) {
         _serial.begin(baud);
         _ready = true;
-        SCREENLIB_TRACEF("[screenlib][uart] begin baud=%lu default_pins=1\n",
-                         static_cast<unsigned long>(baud));
+        SCREENLIB_LOGI("screenlib.uart",
+                       "begin baud=%lu default_pins=1",
+                       static_cast<unsigned long>(baud));
     }
 
     bool connected() const override {
