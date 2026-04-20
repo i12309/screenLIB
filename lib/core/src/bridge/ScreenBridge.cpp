@@ -1,14 +1,62 @@
 #include "ScreenBridge.h"
 
 #include <string.h>
+#include <stdio.h>
+
+#ifndef SCREENLIB_TRACE
+#define SCREENLIB_TRACE 0
+#endif
+
+#if SCREENLIB_TRACE
+#define SCREENLIB_TRACEF(...) printf(__VA_ARGS__)
+#else
+#define SCREENLIB_TRACEF(...) ((void)0)
+#endif
+
+namespace {
+
+const char* screenlib_payload_name(pb_size_t tag) {
+    switch (tag) {
+        case Envelope_show_page_tag: return "show_page";
+        case Envelope_set_text_tag: return "set_text";
+        case Envelope_set_color_tag: return "set_color";
+        case Envelope_set_visible_tag: return "set_visible";
+        case Envelope_set_value_tag: return "set_value";
+        case Envelope_set_batch_tag: return "set_batch";
+        case Envelope_button_event_tag: return "button_event";
+        case Envelope_input_event_tag: return "input_event";
+        case Envelope_heartbeat_tag: return "heartbeat";
+        case Envelope_hello_tag: return "hello";
+        case Envelope_request_device_info_tag: return "request_device_info";
+        case Envelope_device_info_tag: return "device_info";
+        case Envelope_request_current_page_tag: return "request_current_page";
+        case Envelope_current_page_tag: return "current_page";
+        case Envelope_request_page_state_tag: return "request_page_state";
+        case Envelope_page_state_tag: return "page_state";
+        case Envelope_request_element_state_tag: return "request_element_state";
+        case Envelope_element_state_tag: return "element_state";
+        default: return "unknown";
+    }
+}
+
+}  // namespace
 
 bool ScreenBridge::sendEnvelope(const Envelope& env) {
     const size_t protoLen = ProtoCodec::encode(env, _protoTxBuf, sizeof(_protoTxBuf));
     if (protoLen == 0) {
+        SCREENLIB_TRACEF("[screenlib][bridge] tx encode failed payload=%s(%u)\n",
+                         screenlib_payload_name(env.which_payload),
+                         static_cast<unsigned>(env.which_payload));
         return false;
     }
 
-    return sendFramePayload(_protoTxBuf, protoLen);
+    const bool ok = sendFramePayload(_protoTxBuf, protoLen);
+    SCREENLIB_TRACEF("[screenlib][bridge] tx payload=%s(%u) proto=%u status=%s\n",
+                     screenlib_payload_name(env.which_payload),
+                     static_cast<unsigned>(env.which_payload),
+                     static_cast<unsigned>(protoLen),
+                     ok ? "ok" : "fail");
+    return ok;
 }
 
 size_t ScreenBridge::processIncoming() {
@@ -21,6 +69,7 @@ size_t ScreenBridge::processIncoming() {
     if (nowConnected != _lastConnected) {
         _frameCodec.reset();
         _lastConnected = nowConnected;
+        SCREENLIB_TRACEF("[screenlib][bridge] link %s\n", nowConnected ? "up" : "down");
     }
     if (!nowConnected) {
         return 0;
@@ -39,8 +88,16 @@ size_t ScreenBridge::processIncoming() {
         while (_frameCodec.popFrame(frame)) {
             Envelope env{};
             if (!ProtoCodec::decode(frame.payload, frame.payloadLen, env)) {
+                SCREENLIB_TRACEF("[screenlib][bridge] rx decode failed payload_len=%u seq=%u\n",
+                                 static_cast<unsigned>(frame.payloadLen),
+                                 static_cast<unsigned>(frame.seq));
                 continue;
             }
+            SCREENLIB_TRACEF("[screenlib][bridge] rx payload=%s(%u) payload_len=%u seq=%u\n",
+                             screenlib_payload_name(env.which_payload),
+                             static_cast<unsigned>(env.which_payload),
+                             static_cast<unsigned>(frame.payloadLen),
+                             static_cast<unsigned>(frame.seq));
             dispatchEnvelope(env);
             processed++;
         }
