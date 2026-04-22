@@ -38,6 +38,10 @@ message Envelope {
     PageState           page_state           = 16; // screen -> backend
     RequestElementState request_element_state= 17; // backend -> screen
     ElementState        element_state        = 18; // screen -> backend
+    SetElementAttribute      set_element_attribute       = 19; // точечная запись style/layout атрибута
+    SetElementAttributeBatch set_element_attribute_batch = 20; // пакетная запись нескольких атрибутов
+    RequestElementAttribute  request_element_attribute   = 21; // backend -> screen
+    ElementAttributeState    element_attribute_state     = 22; // screen -> backend
   }
 }
 
@@ -80,6 +84,45 @@ message SetBatch {
   repeated SetColor   colors   = 2;
   repeated SetVisible visibles = 3;
   repeated SetValue   values   = 4;
+}
+
+// ---- Typed element attributes ----
+
+// Поддерживаемые атрибуты элемента (точечный set/get).
+enum ElementAttribute {
+  ELEMENT_ATTRIBUTE_UNKNOWN = 0;
+  ELEMENT_ATTRIBUTE_POSITION_WIDTH = 1;
+  ELEMENT_ATTRIBUTE_POSITION_HEIGHT = 2;
+  ELEMENT_ATTRIBUTE_BACKGROUND_COLOR = 3;
+  ELEMENT_ATTRIBUTE_BORDER_COLOR = 4;
+  ELEMENT_ATTRIBUTE_BORDER_WIDTH = 5;
+  ELEMENT_ATTRIBUTE_TEXT_COLOR = 6;
+  ELEMENT_ATTRIBUTE_TEXT_FONT = 7;
+}
+
+// Типизированный id шрифта для text.font.
+enum ElementFont {
+  ELEMENT_FONT_UNKNOWN = 0;
+  ELEMENT_FONT_UI_M18 = 1;
+  ELEMENT_FONT_UI_M20 = 2;
+  ELEMENT_FONT_UI_M24 = 3;
+  ELEMENT_FONT_UI_M70 = 4;
+}
+
+// Точечная запись одного атрибута элемента.
+message SetElementAttribute {
+  uint32 element_id = 1;
+  ElementAttribute attribute = 2;
+  oneof value {
+    int32 int_value = 3;
+    uint32 color_value = 4; // RGB888
+    ElementFont font_value = 5;
+  }
+}
+
+// Пакетная запись нескольких атрибутов.
+message SetElementAttributeBatch {
+  repeated SetElementAttribute attributes = 1;
 }
 
 // ---- Экран → Контроллер ----
@@ -197,4 +240,26 @@ message ElementState {
   uint32 page_id    = 2;
   bool found        = 3;
   PageElementState element = 4;
+}
+
+// Запрос одного точечного атрибута элемента.
+message RequestElementAttribute {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+  uint32 element_id = 3;
+  ElementAttribute attribute = 4;
+}
+
+// Ответ со значением одного атрибута элемента.
+message ElementAttributeState {
+  uint32 request_id = 1;
+  uint32 page_id    = 2;
+  uint32 element_id = 3;
+  ElementAttribute attribute = 4;
+  bool found = 5;
+  oneof value {
+    int32 int_value = 6;
+    uint32 color_value = 7; // RGB888
+    ElementFont font_value = 8;
+  }
 }

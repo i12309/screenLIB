@@ -13,6 +13,38 @@
 
 namespace screenlib {
 
+namespace {
+
+// Фабрики типизированных атрибутов для компактной реализации вспомогательных методов.
+SetElementAttribute make_int_attribute(uint32_t elementId, ElementAttribute attribute, int32_t value) {
+    SetElementAttribute attr = SetElementAttribute_init_zero;
+    attr.element_id = elementId;
+    attr.attribute = attribute;
+    attr.which_value = SetElementAttribute_int_value_tag;
+    attr.value.int_value = value;
+    return attr;
+}
+
+SetElementAttribute make_color_attribute(uint32_t elementId, ElementAttribute attribute, uint32_t rgb888) {
+    SetElementAttribute attr = SetElementAttribute_init_zero;
+    attr.element_id = elementId;
+    attr.attribute = attribute;
+    attr.which_value = SetElementAttribute_color_value_tag;
+    attr.value.color_value = rgb888 & 0x00FFFFFFu;
+    return attr;
+}
+
+SetElementAttribute make_font_attribute(uint32_t elementId, ElementAttribute attribute, ElementFont font) {
+    SetElementAttribute attr = SetElementAttribute_init_zero;
+    attr.element_id = elementId;
+    attr.attribute = attribute;
+    attr.which_value = SetElementAttribute_font_value_tag;
+    attr.value.font_value = font;
+    return attr;
+}
+
+}  // namespace
+
 bool ScreenSystem::init(const ScreenConfig& cfg) {
     return initWithError(cfg, nullptr, 0);
 }
@@ -77,6 +109,93 @@ bool ScreenSystem::setValue(uint32_t elementId, int32_t value) {
 
 bool ScreenSystem::setVisible(uint32_t elementId, bool visible) {
     return _manager.setVisible(elementId, visible);
+}
+
+bool ScreenSystem::setElementAttribute(const SetElementAttribute& attr) {
+    return _manager.setElementAttribute(attr);
+}
+
+bool ScreenSystem::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
+    return _manager.setElementAttributeBatch(batch);
+}
+
+bool ScreenSystem::requestElementAttribute(uint32_t elementId,
+                                           ElementAttribute attribute,
+                                           uint32_t pageId,
+                                           uint32_t requestId) {
+    return _manager.requestElementAttribute(elementId, attribute, pageId, requestId);
+}
+
+// ----- Типизированные вспомогательные методы записи -----
+bool ScreenSystem::setElementWidth(uint32_t elementId, int32_t value) {
+    return setElementAttribute(
+        make_int_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH, value));
+}
+
+bool ScreenSystem::setElementHeight(uint32_t elementId, int32_t value) {
+    return setElementAttribute(
+        make_int_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT, value));
+}
+
+bool ScreenSystem::setElementBackgroundColor(uint32_t elementId, uint32_t rgb888) {
+    return setElementAttribute(
+        make_color_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BACKGROUND_COLOR, rgb888));
+}
+
+bool ScreenSystem::setElementBorderColor(uint32_t elementId, uint32_t rgb888) {
+    return setElementAttribute(
+        make_color_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_COLOR, rgb888));
+}
+
+bool ScreenSystem::setElementBorderWidth(uint32_t elementId, int32_t value) {
+    return setElementAttribute(
+        make_int_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH, value));
+}
+
+bool ScreenSystem::setElementTextColor(uint32_t elementId, uint32_t rgb888) {
+    return setElementAttribute(
+        make_color_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR, rgb888));
+}
+
+bool ScreenSystem::setElementTextFont(uint32_t elementId, ElementFont font) {
+    return setElementAttribute(
+        make_font_attribute(elementId, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT, font));
+}
+
+// ----- Типизированные вспомогательные методы запроса -----
+bool ScreenSystem::requestElementWidth(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementHeight(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementBackgroundColor(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BACKGROUND_COLOR, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementBorderColor(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_COLOR, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementBorderWidth(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementTextColor(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR, pageId, requestId);
+}
+
+bool ScreenSystem::requestElementTextFont(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
+    return requestElementAttribute(
+        elementId, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT, pageId, requestId);
 }
 
 bool ScreenSystem::sendHeartbeat(uint32_t uptimeMs) {

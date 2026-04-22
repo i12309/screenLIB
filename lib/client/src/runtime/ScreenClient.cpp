@@ -8,7 +8,7 @@ ScreenClient::ScreenClient(ITransport& transport)
     : _transport(transport), _bridge(transport) {}
 
 void ScreenClient::setUiAdapter(screenlib::adapter::IUiAdapter* uiAdapter) {
-    // Отвязываем sink от старого адаптера, чтобы не оставить висячий callback.
+    // Отвязываем sink от старого адаптера, чтобы не оставить висячий обработчик.
     if (_uiAdapter != nullptr && _initialized) {
         _uiAdapter->setEventSink(nullptr, nullptr);
     }
@@ -118,6 +118,11 @@ bool ScreenClient::sendPageState(const PageState& pageState) {
 
 bool ScreenClient::sendElementState(const ElementState& elementState) {
     return _bridge.sendElementState(elementState);
+}
+
+// Ответ на request_element_attribute (screen -> host).
+bool ScreenClient::sendElementAttributeState(const ElementAttributeState& state) {
+    return _bridge.sendElementAttributeState(state);
 }
 
 void ScreenClient::onBridgeEnvelopeStatic(const Envelope& env, void* userData) {

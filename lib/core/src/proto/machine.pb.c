@@ -27,6 +27,12 @@ PB_BIND(SetValue, SetValue, AUTO)
 PB_BIND(SetBatch, SetBatch, 2)
 
 
+PB_BIND(SetElementAttribute, SetElementAttribute, AUTO)
+
+
+PB_BIND(SetElementAttributeBatch, SetElementAttributeBatch, AUTO)
+
+
 PB_BIND(ButtonEvent, ButtonEvent, AUTO)
 
 
@@ -67,5 +73,20 @@ PB_BIND(RequestElementState, RequestElementState, AUTO)
 
 
 PB_BIND(ElementState, ElementState, AUTO)
+
+
+PB_BIND(RequestElementAttribute, RequestElementAttribute, AUTO)
+
+
+PB_BIND(ElementAttributeState, ElementAttributeState, AUTO)
+
+
+
+
+
+
+
+
+
 
 

@@ -9,7 +9,7 @@ void ScreenEndpoint::configure(uint8_t endpointId, EndpointRole role, ScreenBrid
     _enabled = enabled;
 
     if (_bridge != nullptr) {
-        // Привязываем callback входящих сообщений bridge к endpoint.
+        // Привязываем обработчик входящих сообщений bridge к endpoint.
         _bridge->setEnvelopeHandler(&ScreenEndpoint::onBridgeEnvelope, this);
     }
 }
@@ -41,6 +41,16 @@ bool ScreenEndpoint::setVisible(uint32_t elementId, bool visible) {
     return canUseBridge() && _bridge->setVisible(elementId, visible);
 }
 
+// Типизированный set одного атрибута.
+bool ScreenEndpoint::setElementAttribute(const SetElementAttribute& attr) {
+    return canUseBridge() && _bridge->setElementAttribute(attr);
+}
+
+// Пакет типизированных атрибутов.
+bool ScreenEndpoint::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
+    return canUseBridge() && _bridge->setElementAttributeBatch(batch);
+}
+
 bool ScreenEndpoint::sendHeartbeat(uint32_t uptimeMs) {
     return canUseBridge() && _bridge->sendHeartbeat(uptimeMs);
 }
@@ -59,6 +69,14 @@ bool ScreenEndpoint::requestCurrentPage(uint32_t requestId) {
 
 bool ScreenEndpoint::requestPageState(uint32_t pageId, uint32_t requestId) {
     return canUseBridge() && _bridge->requestPageState(pageId, requestId);
+}
+
+// Запрос типизированного значения одного атрибута.
+bool ScreenEndpoint::requestElementAttribute(uint32_t elementId,
+                                             ElementAttribute attribute,
+                                             uint32_t pageId,
+                                             uint32_t requestId) {
+    return canUseBridge() && _bridge->requestElementAttribute(elementId, attribute, pageId, requestId);
 }
 
 bool ScreenEndpoint::canUseBridge() const {
@@ -80,7 +98,7 @@ void ScreenEndpoint::onBridgeEnvelope(const Envelope& env, void* userData) {
     }
 
     // Важно: обработчик вызывается синхронно из tick/poll.
-    // Тяжёлую бизнес-логику лучше выносить из callback в отдельную очередь задач.
+    // Тяжёлую бизнес-логику лучше выносить из обработчика в отдельную очередь задач.
     self->_incomingHandler(env, self->makeEventContext(), self->_incomingUser);
 }
 

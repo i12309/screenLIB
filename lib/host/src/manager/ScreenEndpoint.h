@@ -11,7 +11,7 @@ namespace screenlib {
 // Endpoint одного экрана (одного канала ScreenBridge).
 class ScreenEndpoint {
 public:
-    // Callback входящих сообщений с контекстом источника.
+    // Обработчик входящих сообщений с контекстом источника.
     using IncomingHandler = void (*)(const Envelope& env, const ScreenEventContext& ctx, void* userData);
 
     ScreenEndpoint() = default;
@@ -43,13 +43,21 @@ public:
     bool setText(uint32_t elementId, const char* text);
     bool setValue(uint32_t elementId, int32_t value);
     bool setVisible(uint32_t elementId, bool visible);
+    // Типизированные команды изменения атрибутов UI.
+    bool setElementAttribute(const SetElementAttribute& attr);
+    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
 
-    // Service request helper-методы (host -> screen).
+    // Сервисные вспомогательные методы запросов (host -> screen).
     bool requestDeviceInfo(uint32_t requestId = 0);
     bool requestCurrentPage(uint32_t requestId = 0);
     bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
+    // Запрос одного типизированного атрибута элемента на стороне клиента экрана.
+    bool requestElementAttribute(uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 uint32_t pageId = 0,
+                                 uint32_t requestId = 0);
 
 private:
     uint8_t _id = 0;
@@ -63,7 +71,7 @@ private:
     bool canUseBridge() const;
     ScreenEventContext makeEventContext() const;
 
-    // Callback от ScreenBridge.
+    // Обработчик сообщения от ScreenBridge.
     static void onBridgeEnvelope(const Envelope& env, void* userData);
 };
 

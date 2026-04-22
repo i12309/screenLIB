@@ -14,6 +14,82 @@ bool Element::setVisible(bool visible) {
     return _rt != nullptr && _rt->setVisible(_id, visible);
 }
 
+// Универсальный типизированный set с принудительной фиксацией element_id текущего Element.
+bool Element::setAttribute(const SetElementAttribute& attr) {
+    if (_rt == nullptr) {
+        return false;
+    }
+    SetElementAttribute normalized = attr;
+    normalized.element_id = _id;
+    return _rt->setElementAttribute(normalized);
+}
+
+// Универсальный типизированный get для текущей страницы runtime.
+bool Element::requestAttribute(ElementAttribute attribute, uint32_t requestId) {
+    if (_rt == nullptr) {
+        return false;
+    }
+    return _rt->requestElementAttribute(_id, attribute, _rt->currentPageId(), requestId);
+}
+
+// ----- Типизированные вспомогательные методы записи -----
+bool Element::setWidth(int32_t value) {
+    return _rt != nullptr && _rt->setElementWidth(_id, value);
+}
+
+bool Element::setHeight(int32_t value) {
+    return _rt != nullptr && _rt->setElementHeight(_id, value);
+}
+
+bool Element::setBackgroundColor(uint32_t rgb888) {
+    return _rt != nullptr && _rt->setElementBackgroundColor(_id, rgb888);
+}
+
+bool Element::setBorderColor(uint32_t rgb888) {
+    return _rt != nullptr && _rt->setElementBorderColor(_id, rgb888);
+}
+
+bool Element::setBorderWidth(int32_t value) {
+    return _rt != nullptr && _rt->setElementBorderWidth(_id, value);
+}
+
+bool Element::setTextColor(uint32_t rgb888) {
+    return _rt != nullptr && _rt->setElementTextColor(_id, rgb888);
+}
+
+bool Element::setTextFont(ElementFont font) {
+    return _rt != nullptr && _rt->setElementTextFont(_id, font);
+}
+
+// ----- Типизированные вспомогательные методы запроса -----
+bool Element::requestWidth(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementWidth(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestHeight(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementHeight(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestBackgroundColor(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementBackgroundColor(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestBorderColor(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementBorderColor(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestBorderWidth(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementBorderWidth(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestTextColor(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementTextColor(_id, _rt->currentPageId(), requestId);
+}
+
+bool Element::requestTextFont(uint32_t requestId) {
+    return _rt != nullptr && _rt->requestElementTextFont(_id, _rt->currentPageId(), requestId);
+}
+
 bool SinglePageRuntime::init(const ScreenConfig& cfg) {
     _screens.setEventHandler(&SinglePageRuntime::onScreenEvent, this);
     _initialized = _screens.init(cfg);

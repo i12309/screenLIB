@@ -56,6 +56,16 @@ bool ScreenManager::setVisible(uint32_t elementId, bool visible) {
     return sendSetVisibleByMode(elementId, visible);
 }
 
+// Точечная типизированная запись одного атрибута.
+bool ScreenManager::setElementAttribute(const SetElementAttribute& attr) {
+    return sendSetElementAttributeByMode(attr);
+}
+
+// Пакет типизированных атрибутов.
+bool ScreenManager::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
+    return sendSetElementAttributeBatchByMode(batch);
+}
+
 bool ScreenManager::sendHeartbeat(uint32_t uptimeMs) {
     return sendHeartbeatByMode(uptimeMs);
 }
@@ -74,6 +84,14 @@ bool ScreenManager::requestCurrentPage(uint32_t requestId) {
 
 bool ScreenManager::requestPageState(uint32_t pageId, uint32_t requestId) {
     return sendRequestPageStateByMode(pageId, requestId);
+}
+
+// Запрос типизированного значения одного атрибута.
+bool ScreenManager::requestElementAttribute(uint32_t elementId,
+                                            ElementAttribute attribute,
+                                            uint32_t pageId,
+                                            uint32_t requestId) {
+    return sendRequestElementAttributeByMode(elementId, attribute, pageId, requestId);
 }
 
 void ScreenManager::onEndpointEvent(const Envelope& env, const ScreenEventContext& ctx, void* userData) {
@@ -157,6 +175,36 @@ bool ScreenManager::sendSetVisibleByMode(uint32_t elementId, bool visible) {
     return false;
 }
 
+bool ScreenManager::sendSetElementAttributeByMode(const SetElementAttribute& attr) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.setElementAttribute(attr);
+        case MirrorMode::WebOnly:
+            return _web.setElementAttribute(attr);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.setElementAttribute(attr);
+            const bool okWeb = _web.setElementAttribute(attr);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
+bool ScreenManager::sendSetElementAttributeBatchByMode(const SetElementAttributeBatch& batch) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.setElementAttributeBatch(batch);
+        case MirrorMode::WebOnly:
+            return _web.setElementAttributeBatch(batch);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.setElementAttributeBatch(batch);
+            const bool okWeb = _web.setElementAttributeBatch(batch);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
 bool ScreenManager::sendHeartbeatByMode(uint32_t uptimeMs) {
     switch (effectiveMode()) {
         case MirrorMode::PhysicalOnly:
@@ -228,6 +276,24 @@ bool ScreenManager::sendRequestPageStateByMode(uint32_t pageId, uint32_t request
         case MirrorMode::Both: {
             const bool okPhysical = _physical.requestPageState(pageId, requestId);
             const bool okWeb = _web.requestPageState(pageId, requestId);
+            return okPhysical || okWeb;
+        }
+    }
+    return false;
+}
+
+bool ScreenManager::sendRequestElementAttributeByMode(uint32_t elementId,
+                                                      ElementAttribute attribute,
+                                                      uint32_t pageId,
+                                                      uint32_t requestId) {
+    switch (effectiveMode()) {
+        case MirrorMode::PhysicalOnly:
+            return _physical.requestElementAttribute(elementId, attribute, pageId, requestId);
+        case MirrorMode::WebOnly:
+            return _web.requestElementAttribute(elementId, attribute, pageId, requestId);
+        case MirrorMode::Both: {
+            const bool okPhysical = _physical.requestElementAttribute(elementId, attribute, pageId, requestId);
+            const bool okWeb = _web.requestElementAttribute(elementId, attribute, pageId, requestId);
             return okPhysical || okWeb;
         }
     }

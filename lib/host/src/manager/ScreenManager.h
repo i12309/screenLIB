@@ -33,16 +33,25 @@ public:
         _eventUser = userData;
     }
 
-    // High-level команды экрана.
+    // Высокоуровневые команды экрана.
     bool showPage(uint32_t pageId);
     bool setText(uint32_t elementId, const char* text);
     bool setValue(uint32_t elementId, int32_t value);
     bool setVisible(uint32_t elementId, bool visible);
+    // Точечная типизированная запись одного атрибута элемента.
+    bool setElementAttribute(const SetElementAttribute& attr);
+    // Пакет типизированных атрибутов (несколько SetElementAttribute).
+    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
     bool requestDeviceInfo(uint32_t requestId = 0);
     bool requestCurrentPage(uint32_t requestId = 0);
     bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
+    // Запрос значения одного типизированного атрибута элемента.
+    bool requestElementAttribute(uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 uint32_t pageId = 0,
+                                 uint32_t requestId = 0);
 
 private:
     ScreenConfig _cfg{};
@@ -54,7 +63,7 @@ private:
     EventHandler _eventHandler = nullptr;
     void* _eventUser = nullptr;
 
-    // Общий callback endpoint -> manager.
+    // Общий обработчик endpoint -> manager.
     static void onEndpointEvent(const Envelope& env, const ScreenEventContext& ctx, void* userData);
     void handleEndpointEvent(const Envelope& env, const ScreenEventContext& ctx);
 
@@ -66,11 +75,18 @@ private:
     bool sendSetTextByMode(uint32_t elementId, const char* text);
     bool sendSetValueByMode(uint32_t elementId, int32_t value);
     bool sendSetVisibleByMode(uint32_t elementId, bool visible);
+    // Маршрутизация типизированных операций с учетом MirrorMode.
+    bool sendSetElementAttributeByMode(const SetElementAttribute& attr);
+    bool sendSetElementAttributeBatchByMode(const SetElementAttributeBatch& batch);
     bool sendHeartbeatByMode(uint32_t uptimeMs);
     bool sendBatchByMode(const SetBatch& batch);
     bool sendRequestDeviceInfoByMode(uint32_t requestId);
     bool sendRequestCurrentPageByMode(uint32_t requestId);
     bool sendRequestPageStateByMode(uint32_t pageId, uint32_t requestId);
+    bool sendRequestElementAttributeByMode(uint32_t elementId,
+                                           ElementAttribute attribute,
+                                           uint32_t pageId,
+                                           uint32_t requestId);
 };
 
 }  // namespace screenlib

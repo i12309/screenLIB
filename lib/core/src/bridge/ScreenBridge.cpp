@@ -28,6 +28,10 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_page_state_tag: return "page_state";
         case Envelope_request_element_state_tag: return "request_element_state";
         case Envelope_element_state_tag: return "element_state";
+        case Envelope_set_element_attribute_tag: return "set_element_attribute";
+        case Envelope_set_element_attribute_batch_tag: return "set_element_attribute_batch";
+        case Envelope_request_element_attribute_tag: return "request_element_attribute";
+        case Envelope_element_attribute_state_tag: return "element_attribute_state";
         default: return "unknown";
     }
 }
@@ -55,11 +59,8 @@ bool ScreenBridge::sendEnvelope(const Envelope& env) {
 }
 
 size_t ScreenBridge::processIncoming() {
-    // Для WebSocket transport tick обязателен, для UART это обычно no-op.
     _transport.tick();
 
-    // При изменении состояния канала (reconnect/disconnect) сбрасываем parser и очередь кадров.
-    // Это защищает от "хвоста" незаконченного кадра после обрыва связи.
     const bool nowConnected = _transport.connected();
     if (nowConnected != _lastConnected) {
         _frameCodec.reset();
@@ -150,6 +151,53 @@ bool ScreenBridge::sendHeartbeat(uint32_t uptimeMs) {
     return sendEnvelope(env);
 }
 
+// Типизированный set одного атрибута с проверкой пары attribute/value.
+bool ScreenBridge::setElementAttribute(const SetElementAttribute& attr) {
+    SetElementAttribute safeAttr = SetElementAttribute_init_zero;
+    if (!sanitizeElementAttribute(attr, safeAttr)) {
+        return false;
+    }
+
+    Envelope env{};
+    env.which_payload = Envelope_set_element_attribute_tag;
+    env.payload.set_element_attribute = safeAttr;
+    return sendEnvelope(env);
+}
+
+// Типизированный batch. Если единый пакет не отправился, резервный переход на split.
+bool ScreenBridge::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
+    SetElementAttributeBatch safeBatch = SetElementAttributeBatch_init_zero;
+    sanitizeElementAttributeBatch(batch, safeBatch);
+
+    if (safeBatch.attributes_count == 0) {
+        return false;
+    }
+
+    Envelope env{};
+    env.which_payload = Envelope_set_element_attribute_batch_tag;
+    env.payload.set_element_attribute_batch = safeBatch;
+
+    if (sendEnvelope(env)) {
+        return true;
+    }
+
+    return sendElementAttributeBatchSplit(safeBatch);
+}
+
+// Типизированный get одного атрибута.
+bool ScreenBridge::requestElementAttribute(uint32_t elementId,
+                                           ElementAttribute attribute,
+                                           uint32_t pageId,
+                                           uint32_t requestId) {
+    Envelope env{};
+    env.which_payload = Envelope_request_element_attribute_tag;
+    env.payload.request_element_attribute.request_id = requestId;
+    env.payload.request_element_attribute.page_id = pageId;
+    env.payload.request_element_attribute.element_id = elementId;
+    env.payload.request_element_attribute.attribute = attribute;
+    return sendEnvelope(env);
+}
+
 bool ScreenBridge::sendBatch(const SetBatch& batch) {
     SetBatch safeBatch{};
     sanitizeBatch(batch, safeBatch);
@@ -158,12 +206,10 @@ bool ScreenBridge::sendBatch(const SetBatch& batch) {
     env.which_payload = Envelope_set_batch_tag;
     env.payload.set_batch = safeBatch;
 
-    // Сначала пробуем отправить единым сообщением.
     if (sendEnvelope(env)) {
         return true;
     }
 
-    // Fallback-режим: если единый SetBatch не ушёл по любой причине, режем на отдельные команды.
     return sendBatchSplit(safeBatch);
 }
 
@@ -232,6 +278,14 @@ bool ScreenBridge::sendElementState(const ElementState& elementState) {
     Envelope env{};
     env.which_payload = Envelope_element_state_tag;
     env.payload.element_state = elementState;
+    return sendEnvelope(env);
+}
+
+// Типизированный ответ на request_element_attribute.
+bool ScreenBridge::sendElementAttributeState(const ElementAttributeState& state) {
+    Envelope env{};
+    env.which_payload = Envelope_element_attribute_state_tag;
+    env.payload.element_attribute_state = state;
     return sendEnvelope(env);
 }
 
@@ -333,5 +387,82 @@ bool ScreenBridge::sendBatchSplit(const SetBatch& batch) {
         }
     }
 
+    return true;
+}
+
+uint8_t ScreenBridge::clampAttributeBatchCount(uint8_t value) {
+    return value > kMaxAttributeBatchCount ? kMaxAttributeBatchCount : value;
+}
+
+bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst) {
+    dst = SetElementAttribute_init_zero;
+    dst.element_id = src.element_id;
+
+    if (src.attribute < _ElementAttribute_MIN || src.attribute > _ElementAttribute_MAX) {
+        return false;
+    }
+    dst.attribute = src.attribute;
+
+    switch (src.attribute) {
+        // Числовые атрибуты.
+        case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH:
+            if (src.which_value != SetElementAttribute_int_value_tag) {
+                return false;
+            }
+            dst.which_value = SetElementAttribute_int_value_tag;
+            dst.value.int_value = src.value.int_value;
+            return true;
+
+        // Цветовые атрибуты (нормализуем к RGB888).
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BACKGROUND_COLOR:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_COLOR:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR:
+            if (src.which_value != SetElementAttribute_color_value_tag) {
+                return false;
+            }
+            dst.which_value = SetElementAttribute_color_value_tag;
+            dst.value.color_value = src.value.color_value & 0x00FFFFFFu;
+            return true;
+
+        // Шрифтовый атрибут (enum ElementFont).
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT:
+            if (src.which_value != SetElementAttribute_font_value_tag) {
+                return false;
+            }
+            if (src.value.font_value < _ElementFont_MIN || src.value.font_value > _ElementFont_MAX) {
+                return false;
+            }
+            dst.which_value = SetElementAttribute_font_value_tag;
+            dst.value.font_value = src.value.font_value;
+            return true;
+
+        case ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN:
+        default:
+            return false;
+    }
+}
+
+void ScreenBridge::sanitizeElementAttributeBatch(const SetElementAttributeBatch& src,
+                                                 SetElementAttributeBatch& dst) {
+    dst = SetElementAttributeBatch_init_zero;
+
+    const uint8_t count = clampAttributeBatchCount(static_cast<uint8_t>(src.attributes_count));
+    for (uint8_t i = 0; i < count; ++i) {
+        SetElementAttribute tmp = SetElementAttribute_init_zero;
+        if (sanitizeElementAttribute(src.attributes[i], tmp)) {
+            dst.attributes[dst.attributes_count++] = tmp;
+        }
+    }
+}
+
+// Split-отправка типизированного батча по одному атрибуту.
+bool ScreenBridge::sendElementAttributeBatchSplit(const SetElementAttributeBatch& batch) {
+    for (uint8_t i = 0; i < batch.attributes_count; ++i) {
+        if (!setElementAttribute(batch.attributes[i])) {
+            return false;
+        }
+    }
     return true;
 }

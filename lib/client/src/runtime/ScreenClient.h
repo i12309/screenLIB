@@ -38,7 +38,7 @@ public:
 
     bool connected() const;
 
-    // Внешний callback для трассировки входящих/исходящих Envelope.
+    // Внешний обработчик для трассировки входящих/исходящих Envelope.
     void setEventHandler(EventHandler handler, void* userData = nullptr);
 
     bool sendHeartbeat(uint32_t uptimeMs);
@@ -48,11 +48,13 @@ public:
     bool sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value);
     bool sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text);
 
-    // Service response/helper методы экранной стороны.
+    // Сервисные вспомогательные методы ответов экранной стороны.
     bool sendHello(const DeviceInfo& deviceInfo);
     bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
     bool sendPageState(const PageState& pageState);
     bool sendElementState(const ElementState& elementState);
+    // Ответ на request_element_attribute.
+    bool sendElementAttributeState(const ElementAttributeState& state);
 
 private:
     // Размер внутренней очереди событий UI -> controller.

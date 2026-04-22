@@ -61,6 +61,54 @@ public:
     bool setText(uint32_t elementId, const char* text)   { return _screens.setText(elementId, text); }
     bool setValue(uint32_t elementId, int32_t value)     { return _screens.setValue(elementId, value); }
     bool setVisible(uint32_t elementId, bool visible)    { return _screens.setVisible(elementId, visible); }
+    // Универсальные типизированные set/get по атрибуту.
+    bool setElementAttribute(const SetElementAttribute& attr) { return _screens.setElementAttribute(attr); }
+    bool requestElementAttribute(uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 uint32_t pageId = 0,
+                                 uint32_t requestId = 0) {
+        return _screens.requestElementAttribute(elementId, attribute, pageId, requestId);
+    }
+    // Типизированные вспомогательные методы записи.
+    bool setElementWidth(uint32_t elementId, int32_t value) { return _screens.setElementWidth(elementId, value); }
+    bool setElementHeight(uint32_t elementId, int32_t value) { return _screens.setElementHeight(elementId, value); }
+    bool setElementBackgroundColor(uint32_t elementId, uint32_t rgb888) {
+        return _screens.setElementBackgroundColor(elementId, rgb888);
+    }
+    bool setElementBorderColor(uint32_t elementId, uint32_t rgb888) {
+        return _screens.setElementBorderColor(elementId, rgb888);
+    }
+    bool setElementBorderWidth(uint32_t elementId, int32_t value) {
+        return _screens.setElementBorderWidth(elementId, value);
+    }
+    bool setElementTextColor(uint32_t elementId, uint32_t rgb888) {
+        return _screens.setElementTextColor(elementId, rgb888);
+    }
+    bool setElementTextFont(uint32_t elementId, ElementFont font) {
+        return _screens.setElementTextFont(elementId, font);
+    }
+    // Типизированные вспомогательные методы запроса значений.
+    bool requestElementWidth(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementWidth(elementId, pageId, requestId);
+    }
+    bool requestElementHeight(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementHeight(elementId, pageId, requestId);
+    }
+    bool requestElementBackgroundColor(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementBackgroundColor(elementId, pageId, requestId);
+    }
+    bool requestElementBorderColor(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementBorderColor(elementId, pageId, requestId);
+    }
+    bool requestElementBorderWidth(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementBorderWidth(elementId, pageId, requestId);
+    }
+    bool requestElementTextColor(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementTextColor(elementId, pageId, requestId);
+    }
+    bool requestElementTextFont(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0) {
+        return _screens.requestElementTextFont(elementId, pageId, requestId);
+    }
 
 private:
     // Создает экземпляр страницы указанного типа.

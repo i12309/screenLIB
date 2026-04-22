@@ -151,6 +151,59 @@ void test_screen_bridge_service_helpers_encode_envelopes() {
     TEST_ASSERT_EQUAL_UINT32(9, out[4].payload.current_page.page_id);
 }
 
+void test_screen_bridge_attribute_helpers_encode_envelopes() {
+    MockTransport transport;
+    ScreenBridge bridge(transport);
+
+    SetElementAttribute setAttr = SetElementAttribute_init_zero;
+    setAttr.element_id = 41;
+    setAttr.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH;
+    setAttr.which_value = SetElementAttribute_int_value_tag;
+    setAttr.value.int_value = 120;
+    TEST_ASSERT_TRUE(bridge.setElementAttribute(setAttr));
+
+    SetElementAttributeBatch batch = SetElementAttributeBatch_init_zero;
+    batch.attributes_count = 1;
+    batch.attributes[0].element_id = 42;
+    batch.attributes[0].attribute = ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR;
+    batch.attributes[0].which_value = SetElementAttribute_color_value_tag;
+    batch.attributes[0].value.color_value = 0x00112233u;
+    TEST_ASSERT_TRUE(bridge.setElementAttributeBatch(batch));
+
+    TEST_ASSERT_TRUE(bridge.requestElementAttribute(
+        43, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT, 7, 701));
+
+    ElementAttributeState state = ElementAttributeState_init_zero;
+    state.request_id = 702;
+    state.page_id = 7;
+    state.element_id = 43;
+    state.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT;
+    state.found = true;
+    state.which_value = ElementAttributeState_font_value_tag;
+    state.value.font_value = ElementFont_ELEMENT_FONT_UI_M24;
+    TEST_ASSERT_TRUE(bridge.sendElementAttributeState(state));
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, out[0].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(41, out[0].payload.set_element_attribute.element_id);
+    TEST_ASSERT_EQUAL_UINT32(120, static_cast<uint32_t>(out[0].payload.set_element_attribute.value.int_value));
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_batch_tag, out[1].which_payload);
+    TEST_ASSERT_EQUAL_UINT8(1, out[1].payload.set_element_attribute_batch.attributes_count);
+    TEST_ASSERT_EQUAL_UINT32(42, out[1].payload.set_element_attribute_batch.attributes[0].element_id);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, out[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(701, out[2].payload.request_element_attribute.request_id);
+    TEST_ASSERT_EQUAL_UINT32(7, out[2].payload.request_element_attribute.page_id);
+    TEST_ASSERT_EQUAL_UINT32(43, out[2].payload.request_element_attribute.element_id);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[3].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(702, out[3].payload.element_attribute_state.request_id);
+    TEST_ASSERT_TRUE(out[3].payload.element_attribute_state.found);
+}
+
 void test_screen_manager_routes_by_mode() {
     MockTransport physicalTransport;
     MockTransport webTransport;
@@ -310,6 +363,51 @@ void test_screen_system_service_requests_route_to_both_endpoints() {
     TEST_ASSERT_EQUAL_UINT32(4, physicalOut[2].payload.request_page_state.page_id);
 }
 
+void test_screen_system_typed_attribute_helpers_route_to_both_endpoints() {
+    MockTransport physicalTransport;
+    MockTransport webTransport;
+    ScreenBridge physicalBridge(physicalTransport);
+    ScreenBridge webBridge(webTransport);
+
+    screenlib::ScreenSystem screens;
+    screens.bindPhysicalBridge(&physicalBridge);
+    screens.bindWebBridge(&webBridge);
+
+    screenlib::ScreenConfig cfg{};
+    cfg.physical.enabled = true;
+    cfg.physical.type = screenlib::OutputType::WsServer;
+    cfg.physical.wsServer.port = 2991;
+    cfg.web.enabled = true;
+    cfg.web.type = screenlib::OutputType::WsServer;
+    cfg.web.wsServer.port = 2992;
+    cfg.mirrorMode = screenlib::MirrorMode::Both;
+
+    TEST_ASSERT_TRUE(screens.init(cfg));
+
+    TEST_ASSERT_TRUE(screens.setElementWidth(110, 320));
+    TEST_ASSERT_TRUE(screens.setElementTextColor(111, 0x00AABBCCu));
+    TEST_ASSERT_TRUE(screens.setElementTextFont(111, ElementFont_ELEMENT_FONT_UI_M20));
+    TEST_ASSERT_TRUE(screens.requestElementTextFont(111, 9, 901));
+
+    std::vector<Envelope> physicalOut;
+    std::vector<Envelope> webOut;
+    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(physicalTransport, physicalOut)));
+    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(webTransport, webOut)));
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[0].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH,
+                             physicalOut[0].payload.set_element_attribute.attribute);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[1].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR,
+                             physicalOut[1].payload.set_element_attribute.attribute);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT,
+                             physicalOut[2].payload.set_element_attribute.attribute);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, physicalOut[3].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(901, physicalOut[3].payload.request_element_attribute.request_id);
+    TEST_ASSERT_EQUAL_UINT32(9, physicalOut[3].payload.request_element_attribute.page_id);
+}
+
 struct BridgeCapture {
     int count = 0;
 } gBridgeCapture;
@@ -357,11 +455,13 @@ void test_screen_bridge_resets_parser_on_disconnect_reconnect() {
 void run_all_tests() {
     RUN_TEST(test_screen_bridge_show_page_encodes_envelope);
     RUN_TEST(test_screen_bridge_service_helpers_encode_envelopes);
+    RUN_TEST(test_screen_bridge_attribute_helpers_encode_envelopes);
     RUN_TEST(test_screen_manager_routes_by_mode);
     RUN_TEST(test_screen_manager_receives_incoming_events_with_context);
     RUN_TEST(test_screen_system_rejects_web_ws_client_on_host_side);
     RUN_TEST(test_screen_system_mirror_mode_sends_to_both_endpoints);
     RUN_TEST(test_screen_system_service_requests_route_to_both_endpoints);
+    RUN_TEST(test_screen_system_typed_attribute_helpers_route_to_both_endpoints);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
 }
 

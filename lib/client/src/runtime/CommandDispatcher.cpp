@@ -34,9 +34,15 @@ bool CommandDispatcher::dispatch(const Envelope& env) {
 
         case Envelope_set_batch_tag:
             return _uiAdapter.applyBatch(env.payload.set_batch);
+        // Точечная типизированная команда (width/height/цвет/шрифт и т.д.).
+        case Envelope_set_element_attribute_tag:
+            return _uiAdapter.setElementAttribute(env.payload.set_element_attribute);
+        // Пакет типизированных команд.
+        case Envelope_set_element_attribute_batch_tag:
+            return _uiAdapter.applyElementAttributeBatch(env.payload.set_element_attribute_batch);
 
         default:
-            // РќРµ СЌРєСЂР°РЅРЅР°СЏ РєРѕРјР°РЅРґР° РґР»СЏ UI-СЃР»РѕСЏ (event/heartbeat/unknown).
+            // Не экранная команда для UI-слоя (event/heartbeat/unknown).
             return false;
     }
 }

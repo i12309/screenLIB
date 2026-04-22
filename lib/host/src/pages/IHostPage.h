@@ -18,6 +18,28 @@ public:
     bool setText(const char* text);
     bool setValue(int32_t value);
     bool setVisible(bool visible);
+    // Универсальный типизированный set (element_id будет принудительно равен id текущего Element).
+    bool setAttribute(const SetElementAttribute& attr);
+    // Универсальный типизированный get (асинхронный запрос значения атрибута).
+    bool requestAttribute(ElementAttribute attribute, uint32_t requestId = 0);
+
+    // Типизированные вспомогательные методы записи.
+    bool setWidth(int32_t value);
+    bool setHeight(int32_t value);
+    bool setBackgroundColor(uint32_t rgb888);
+    bool setBorderColor(uint32_t rgb888);
+    bool setBorderWidth(int32_t value);
+    bool setTextColor(uint32_t rgb888);
+    bool setTextFont(ElementFont font);
+
+    // Типизированные вспомогательные методы запроса значения.
+    bool requestWidth(uint32_t requestId = 0);
+    bool requestHeight(uint32_t requestId = 0);
+    bool requestBackgroundColor(uint32_t requestId = 0);
+    bool requestBorderColor(uint32_t requestId = 0);
+    bool requestBorderWidth(uint32_t requestId = 0);
+    bool requestTextColor(uint32_t requestId = 0);
+    bool requestTextFont(uint32_t requestId = 0);
 
     uint32_t id() const { return _id; }
 

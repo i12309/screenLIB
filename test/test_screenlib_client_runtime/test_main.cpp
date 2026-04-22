@@ -130,6 +130,18 @@ public:
         return true;
     }
 
+    bool setElementAttribute(const SetElementAttribute& attr) override {
+        setElementAttributeCount++;
+        lastElementAttribute = attr;
+        return true;
+    }
+
+    bool applyElementAttributeBatch(const SetElementAttributeBatch& batch) override {
+        applyElementAttributeBatchCount++;
+        lastElementAttributeBatch = batch;
+        return true;
+    }
+
     bool applyBatch(const SetBatch& batch) override {
         applyBatchCount++;
         lastBatch = batch;
@@ -174,6 +186,8 @@ public:
     int setValueCount = 0;
     int setVisibleCount = 0;
     int setColorCount = 0;
+    int setElementAttributeCount = 0;
+    int applyElementAttributeBatchCount = 0;
     int applyBatchCount = 0;
     int setEventSinkCalls = 0;
     int clearEventSinkCalls = 0;
@@ -189,6 +203,8 @@ public:
     uint32_t lastColorElementId = 0;
     uint32_t lastBgColor = 0;
     uint32_t lastFgColor = 0;
+    SetElementAttribute lastElementAttribute = SetElementAttribute_init_zero;
+    SetElementAttributeBatch lastElementAttributeBatch = SetElementAttributeBatch_init_zero;
     SetBatch lastBatch = SetBatch_init_zero;
     std::vector<bool> emitResults;
 
@@ -299,6 +315,27 @@ void test_screen_client_incoming_commands_reach_ui() {
     setBatch.payload.set_batch.texts[0].text[sizeof(setBatch.payload.set_batch.texts[0].text) - 1] = '\0';
     TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setBatch, 5));
 
+    Envelope setElementAttribute{};
+    setElementAttribute.which_payload = Envelope_set_element_attribute_tag;
+    setElementAttribute.payload.set_element_attribute.element_id = 70;
+    setElementAttribute.payload.set_element_attribute.attribute =
+        ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH;
+    setElementAttribute.payload.set_element_attribute.which_value =
+        SetElementAttribute_int_value_tag;
+    setElementAttribute.payload.set_element_attribute.value.int_value = 3;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttribute, 6));
+
+    Envelope setElementAttributeBatch{};
+    setElementAttributeBatch.which_payload = Envelope_set_element_attribute_batch_tag;
+    setElementAttributeBatch.payload.set_element_attribute_batch.attributes_count = 1;
+    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].element_id = 71;
+    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].attribute =
+        ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR;
+    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].which_value =
+        SetElementAttribute_color_value_tag;
+    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].value.color_value = 0x00ABCDEFu;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttributeBatch, 7));
+
     client.tick();
 
     TEST_ASSERT_EQUAL_INT(1, adapter.setTextCount);
@@ -322,6 +359,22 @@ void test_screen_client_incoming_commands_reach_ui() {
     TEST_ASSERT_EQUAL_UINT8(1, adapter.lastBatch.texts_count);
     TEST_ASSERT_EQUAL_UINT32(100, adapter.lastBatch.texts[0].element_id);
     TEST_ASSERT_EQUAL_STRING("batch", adapter.lastBatch.texts[0].text);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.setElementAttributeCount);
+    TEST_ASSERT_EQUAL_UINT32(70, adapter.lastElementAttribute.element_id);
+    TEST_ASSERT_EQUAL_INT(ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH, adapter.lastElementAttribute.attribute);
+    TEST_ASSERT_EQUAL_UINT32(SetElementAttribute_int_value_tag, adapter.lastElementAttribute.which_value);
+    TEST_ASSERT_EQUAL_INT32(3, adapter.lastElementAttribute.value.int_value);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.applyElementAttributeBatchCount);
+    TEST_ASSERT_EQUAL_UINT8(1, adapter.lastElementAttributeBatch.attributes_count);
+    TEST_ASSERT_EQUAL_UINT32(71, adapter.lastElementAttributeBatch.attributes[0].element_id);
+    TEST_ASSERT_EQUAL_INT(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR,
+                          adapter.lastElementAttributeBatch.attributes[0].attribute);
+    TEST_ASSERT_EQUAL_UINT32(SetElementAttribute_color_value_tag,
+                             adapter.lastElementAttributeBatch.attributes[0].which_value);
+    TEST_ASSERT_EQUAL_UINT32(0x00ABCDEFu,
+                             adapter.lastElementAttributeBatch.attributes[0].value.color_value);
 }
 
 void test_screen_client_tick_without_ui_adapter_is_safe() {
@@ -501,6 +554,8 @@ void test_screen_client_incoming_non_screen_envelope_does_not_touch_ui() {
     TEST_ASSERT_EQUAL_INT(0, adapter.setValueCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.setVisibleCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.setColorCount);
+    TEST_ASSERT_EQUAL_INT(0, adapter.setElementAttributeCount);
+    TEST_ASSERT_EQUAL_INT(0, adapter.applyElementAttributeBatchCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.applyBatchCount);
 }
 
@@ -551,8 +606,18 @@ void test_screen_client_service_helpers_send_responses() {
     elementState.element = pageState.elements[0];
     TEST_ASSERT_TRUE(client.sendElementState(elementState));
 
+    ElementAttributeState elementAttributeState = ElementAttributeState_init_zero;
+    elementAttributeState.request_id = 404;
+    elementAttributeState.page_id = 12;
+    elementAttributeState.element_id = 500;
+    elementAttributeState.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH;
+    elementAttributeState.found = true;
+    elementAttributeState.which_value = ElementAttributeState_int_value_tag;
+    elementAttributeState.value.int_value = 123;
+    TEST_ASSERT_TRUE(client.sendElementAttributeState(elementAttributeState));
+
     std::vector<Envelope> out;
-    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(5u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 
     TEST_ASSERT_EQUAL_UINT32(Envelope_hello_tag, out[0].which_payload);
     TEST_ASSERT_TRUE(out[0].payload.hello.has_device_info);
@@ -572,6 +637,14 @@ void test_screen_client_service_helpers_send_responses() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_element_state_tag, out[3].which_payload);
     TEST_ASSERT_EQUAL_UINT32(403, out[3].payload.element_state.request_id);
     TEST_ASSERT_TRUE(out[3].payload.element_state.has_element);
+
+    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[4].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(404, out[4].payload.element_attribute_state.request_id);
+    TEST_ASSERT_EQUAL_UINT32(12, out[4].payload.element_attribute_state.page_id);
+    TEST_ASSERT_EQUAL_UINT32(500, out[4].payload.element_attribute_state.element_id);
+    TEST_ASSERT_TRUE(out[4].payload.element_attribute_state.found);
+    TEST_ASSERT_EQUAL_UINT32(ElementAttributeState_int_value_tag, out[4].payload.element_attribute_state.which_value);
+    TEST_ASSERT_EQUAL_INT32(123, out[4].payload.element_attribute_state.value.int_value);
 }
 
 }  // namespace
