@@ -33,6 +33,8 @@ class IHostPage {
     friend class SinglePageRuntime;
 
 public:
+    using ButtonActionType = ::ButtonAction;
+
     virtual ~IHostPage() = default;
     virtual uint32_t pageId() const = 0;
 
@@ -45,6 +47,12 @@ protected:
     // Точки входа для событий с экрана. Сгенерированный base обычно
     // переопределяет onButton/onInput и диспатчит в типизированные хендлеры
     // конкретных элементов (onClickXxx и т.п.).
+    // Новый overload с action вызывается runtime'ом; старый оставлен для legacy.
+    virtual void onButton(uint32_t elementId, ButtonActionType action) {
+        if (action == ButtonAction_CLICK) {
+            onButton(elementId);
+        }
+    }
     virtual void onButton(uint32_t elementId) { (void)elementId; }
     virtual void onInputInt(uint32_t elementId, int32_t value) {
         (void)elementId; (void)value;

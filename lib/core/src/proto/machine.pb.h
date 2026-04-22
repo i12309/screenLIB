@@ -10,6 +10,14 @@
 #endif
 
 /* Enum definitions */
+/* Тип кнопочного события. */
+typedef enum _ButtonAction {
+    ButtonAction_CLICK = 0,
+    ButtonAction_PUSH = 1,
+    ButtonAction_POP = 2,
+    ButtonAction_REPEAT = 3
+} ButtonAction;
+
 /* Тип динамического состояния элемента в snapshot-ответах. */
 typedef enum _ElementStateType {
     ElementStateType_ELEMENT_STATE_UNKNOWN = 0,
@@ -67,6 +75,7 @@ typedef struct _SetBatch {
 typedef struct _ButtonEvent {
     uint32_t element_id;
     uint32_t page_id; /* с какой страницы пришло событие */
+    ButtonAction action;
 } ButtonEvent;
 
 /* Ввод данных пользователем (числовой input, поле текста) */
@@ -195,6 +204,10 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _ButtonAction_MIN ButtonAction_CLICK
+#define _ButtonAction_MAX ButtonAction_REPEAT
+#define _ButtonAction_ARRAYSIZE ((ButtonAction)(ButtonAction_REPEAT+1))
+
 #define _ElementStateType_MIN ElementStateType_ELEMENT_STATE_UNKNOWN
 #define _ElementStateType_MAX ElementStateType_ELEMENT_STATE_COLOR
 #define _ElementStateType_ARRAYSIZE ((ElementStateType)(ElementStateType_ELEMENT_STATE_COLOR+1))
@@ -206,6 +219,7 @@ extern "C" {
 
 
 
+#define ButtonEvent_action_ENUMTYPE ButtonAction
 
 
 
@@ -230,7 +244,7 @@ extern "C" {
 #define SetVisible_init_default                  {0, 0}
 #define SetValue_init_default                    {0, 0}
 #define SetBatch_init_default                    {0, {SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default}, 0, {SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default}, 0, {SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default}, 0, {SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default}}
-#define ButtonEvent_init_default                 {0, 0}
+#define ButtonEvent_init_default                 {0, 0, _ButtonAction_MIN}
 #define InputEvent_init_default                  {0, 0, 0, {0}}
 #define Heartbeat_init_default                   {0}
 #define ColorState_init_default                  {0, 0}
@@ -251,7 +265,7 @@ extern "C" {
 #define SetVisible_init_zero                     {0, 0}
 #define SetValue_init_zero                       {0, 0}
 #define SetBatch_init_zero                       {0, {SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero}, 0, {SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero}, 0, {SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero}, 0, {SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero}}
-#define ButtonEvent_init_zero                    {0, 0}
+#define ButtonEvent_init_zero                    {0, 0, _ButtonAction_MIN}
 #define InputEvent_init_zero                     {0, 0, 0, {0}}
 #define Heartbeat_init_zero                      {0}
 #define ColorState_init_zero                     {0, 0}
@@ -283,6 +297,7 @@ extern "C" {
 #define SetBatch_values_tag                      4
 #define ButtonEvent_element_id_tag               1
 #define ButtonEvent_page_id_tag                  2
+#define ButtonEvent_action_tag                   3
 #define InputEvent_element_id_tag                1
 #define InputEvent_page_id_tag                   2
 #define InputEvent_int_value_tag                 3
@@ -425,7 +440,8 @@ X(a, STATIC,   REPEATED, MESSAGE,  values,            4)
 
 #define ButtonEvent_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   page_id,           2)
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
+X(a, STATIC,   SINGULAR, UENUM,    action,            3)
 #define ButtonEvent_CALLBACK NULL
 #define ButtonEvent_DEFAULT NULL
 
@@ -569,7 +585,7 @@ extern const pb_msgdesc_t ElementState_msg;
 #define ElementState_fields &ElementState_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ButtonEvent_size                         12
+#define ButtonEvent_size                         14
 #define ColorState_size                          12
 #define CurrentPage_size                         12
 #define DeviceInfo_size                          178

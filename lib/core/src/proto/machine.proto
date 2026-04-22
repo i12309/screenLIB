@@ -84,10 +84,19 @@ message SetBatch {
 
 // ---- Экран → Контроллер ----
 
+// Тип кнопочного события.
+enum ButtonAction {
+  CLICK  = 0;
+  PUSH   = 1;
+  POP    = 2;
+  REPEAT = 3;
+}
+
 // Нажатие кнопки или другого интерактивного элемента
 message ButtonEvent {
   uint32 element_id = 1;
   uint32 page_id    = 2;  // с какой страницы пришло событие
+  ButtonAction action = 3;
 }
 
 // Ввод данных пользователем (числовой input, поле текста)

@@ -42,7 +42,9 @@ public:
     void setEventHandler(EventHandler handler, void* userData = nullptr);
 
     bool sendHeartbeat(uint32_t uptimeMs);
-    bool sendButtonEvent(uint32_t elementId, uint32_t pageId);
+    bool sendButtonEvent(uint32_t elementId,
+                         uint32_t pageId,
+                         ButtonAction action = ButtonAction_CLICK);
     bool sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value);
     bool sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text);
 

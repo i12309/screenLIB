@@ -71,11 +71,12 @@ bool ScreenClient::sendHeartbeat(uint32_t uptimeMs) {
     return sendOutgoingEnvelope(env);
 }
 
-bool ScreenClient::sendButtonEvent(uint32_t elementId, uint32_t pageId) {
+bool ScreenClient::sendButtonEvent(uint32_t elementId, uint32_t pageId, ButtonAction action) {
     Envelope env{};
     env.which_payload = Envelope_button_event_tag;
     env.payload.button_event.element_id = elementId;
     env.payload.button_event.page_id = pageId;
+    env.payload.button_event.action = action;
     return sendOutgoingEnvelope(env);
 }
 

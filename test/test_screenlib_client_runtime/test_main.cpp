@@ -206,11 +206,12 @@ private:
     std::vector<Envelope> _pendingEvents;
 };
 
-Envelope makeButtonEvent(uint32_t elementId, uint32_t pageId) {
+Envelope makeButtonEvent(uint32_t elementId, uint32_t pageId, ButtonAction action = ButtonAction_CLICK) {
     Envelope env{};
     env.which_payload = Envelope_button_event_tag;
     env.payload.button_event.element_id = elementId;
     env.payload.button_event.page_id = pageId;
+    env.payload.button_event.action = action;
     return env;
 }
 
@@ -355,6 +356,26 @@ void test_screen_client_outgoing_button_event_from_adapter() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_button_event_tag, out[0].which_payload);
     TEST_ASSERT_EQUAL_UINT32(55, out[0].payload.button_event.element_id);
     TEST_ASSERT_EQUAL_UINT32(4, out[0].payload.button_event.page_id);
+    TEST_ASSERT_EQUAL_INT(ButtonAction_CLICK, out[0].payload.button_event.action);
+}
+
+void test_screen_client_outgoing_button_event_with_action_from_adapter() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    adapter.queueEvent(makeButtonEvent(91, 6, ButtonAction_PUSH));
+    client.tick();
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(1u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(Envelope_button_event_tag, out[0].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(91, out[0].payload.button_event.element_id);
+    TEST_ASSERT_EQUAL_UINT32(6, out[0].payload.button_event.page_id);
+    TEST_ASSERT_EQUAL_INT(ButtonAction_PUSH, out[0].payload.button_event.action);
 }
 
 void test_screen_client_outgoing_input_events_from_adapter() {
@@ -560,6 +581,7 @@ void run_all_tests() {
     RUN_TEST(test_screen_client_incoming_commands_reach_ui);
     RUN_TEST(test_screen_client_tick_without_ui_adapter_is_safe);
     RUN_TEST(test_screen_client_outgoing_button_event_from_adapter);
+    RUN_TEST(test_screen_client_outgoing_button_event_with_action_from_adapter);
     RUN_TEST(test_screen_client_outgoing_input_events_from_adapter);
     RUN_TEST(test_screen_client_set_ui_adapter_rebinds_sink);
     RUN_TEST(test_screen_client_ui_event_queue_overflow_is_safe);

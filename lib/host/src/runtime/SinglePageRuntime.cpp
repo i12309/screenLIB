@@ -57,7 +57,11 @@ void SinglePageRuntime::dispatch(const Envelope& env, const ScreenEventContext& 
             if (be.page_id != 0 && be.page_id != pageId) {
                 return;
             }
-            _current->onButton(be.element_id);
+            ButtonAction action = be.action;
+            if (action < _ButtonAction_MIN || action > _ButtonAction_MAX) {
+                action = ButtonAction_CLICK;
+            }
+            _current->onButton(be.element_id, action);
             break;
         }
         case Envelope_input_event_tag: {
