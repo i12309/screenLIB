@@ -21,11 +21,13 @@ public:
     // Универсальный типизированный set (element_id будет принудительно равен id текущего Element).
     bool setAttribute(const SetElementAttribute& attr);
     // Универсальный типизированный get (асинхронный запрос значения атрибута).
-    bool requestAttribute(ElementAttribute attribute, uint32_t requestId = 0);
+    bool getAttribute(ElementAttribute attribute, uint32_t requestId = 0);
 
     // Типизированные вспомогательные методы записи.
     bool setWidth(int32_t value);
     bool setHeight(int32_t value);
+    bool setWidthPercent(int32_t percent);
+    bool setHeightPercent(int32_t percent);
     bool setBackgroundColor(uint32_t rgb888);
     bool setBorderColor(uint32_t rgb888);
     bool setBorderWidth(int32_t value);
@@ -33,13 +35,13 @@ public:
     bool setTextFont(ElementFont font);
 
     // Типизированные вспомогательные методы запроса значения.
-    bool requestWidth(uint32_t requestId = 0);
-    bool requestHeight(uint32_t requestId = 0);
-    bool requestBackgroundColor(uint32_t requestId = 0);
-    bool requestBorderColor(uint32_t requestId = 0);
-    bool requestBorderWidth(uint32_t requestId = 0);
-    bool requestTextColor(uint32_t requestId = 0);
-    bool requestTextFont(uint32_t requestId = 0);
+    bool getWidth(uint32_t requestId = 0);
+    bool getHeight(uint32_t requestId = 0);
+    bool getBackgroundColor(uint32_t requestId = 0);
+    bool getBorderColor(uint32_t requestId = 0);
+    bool getBorderWidth(uint32_t requestId = 0);
+    bool getTextColor(uint32_t requestId = 0);
+    bool getTextFont(uint32_t requestId = 0);
 
     uint32_t id() const { return _id; }
 
@@ -81,6 +83,9 @@ protected:
     }
     virtual void onInputText(uint32_t elementId, const char* text) {
         (void)elementId; (void)text;
+    }
+    virtual void onElementAttribute(const ElementAttributeState& state) {
+        (void)state;
     }
 
     // Хелперы для бизнес-логики.

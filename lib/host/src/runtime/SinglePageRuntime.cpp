@@ -2,6 +2,26 @@
 
 namespace screenlib {
 
+namespace {
+
+int32_t encode_percent_coord(int32_t percent) {
+    constexpr int32_t kCoordTypeShift = 29;
+    constexpr int32_t kCoordTypeSpec = (1 << kCoordTypeShift);
+    constexpr int32_t kCoordMax = (1 << kCoordTypeShift) - 1;
+    constexpr int32_t kPctStoredMax = kCoordMax - 1;
+    constexpr int32_t kPctPosMax = kPctStoredMax / 2;
+
+    if (percent < 0) {
+        percent = 0;
+    } else if (percent > kPctPosMax) {
+        percent = kPctPosMax;
+    }
+
+    return kCoordTypeSpec | percent;
+}
+
+}  // namespace
+
 bool Element::setText(const char* text) {
     return _rt != nullptr && _rt->setText(_id, text);
 }
@@ -25,7 +45,7 @@ bool Element::setAttribute(const SetElementAttribute& attr) {
 }
 
 // Универсальный типизированный get для текущей страницы runtime.
-bool Element::requestAttribute(ElementAttribute attribute, uint32_t requestId) {
+bool Element::getAttribute(ElementAttribute attribute, uint32_t requestId) {
     if (_rt == nullptr) {
         return false;
     }
@@ -39,6 +59,14 @@ bool Element::setWidth(int32_t value) {
 
 bool Element::setHeight(int32_t value) {
     return _rt != nullptr && _rt->setElementHeight(_id, value);
+}
+
+bool Element::setWidthPercent(int32_t percent) {
+    return _rt != nullptr && _rt->setElementWidth(_id, encode_percent_coord(percent));
+}
+
+bool Element::setHeightPercent(int32_t percent) {
+    return _rt != nullptr && _rt->setElementHeight(_id, encode_percent_coord(percent));
 }
 
 bool Element::setBackgroundColor(uint32_t rgb888) {
@@ -62,31 +90,31 @@ bool Element::setTextFont(ElementFont font) {
 }
 
 // ----- Типизированные вспомогательные методы запроса -----
-bool Element::requestWidth(uint32_t requestId) {
+bool Element::getWidth(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementWidth(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestHeight(uint32_t requestId) {
+bool Element::getHeight(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementHeight(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestBackgroundColor(uint32_t requestId) {
+bool Element::getBackgroundColor(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementBackgroundColor(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestBorderColor(uint32_t requestId) {
+bool Element::getBorderColor(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementBorderColor(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestBorderWidth(uint32_t requestId) {
+bool Element::getBorderWidth(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementBorderWidth(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestTextColor(uint32_t requestId) {
+bool Element::getTextColor(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementTextColor(_id, _rt->currentPageId(), requestId);
 }
 
-bool Element::requestTextFont(uint32_t requestId) {
+bool Element::getTextFont(uint32_t requestId) {
     return _rt != nullptr && _rt->requestElementTextFont(_id, _rt->currentPageId(), requestId);
 }
 
@@ -150,6 +178,14 @@ void SinglePageRuntime::dispatch(const Envelope& env, const ScreenEventContext& 
             } else if (ie.which_value == InputEvent_string_value_tag) {
                 _current->onInputText(ie.element_id, ie.value.string_value);
             }
+            break;
+        }
+        case Envelope_element_attribute_state_tag: {
+            const ElementAttributeState& eas = env.payload.element_attribute_state;
+            if (eas.page_id != 0 && eas.page_id != pageId) {
+                return;
+            }
+            _current->onElementAttribute(eas);
             break;
         }
         default:
