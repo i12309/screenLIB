@@ -46,14 +46,21 @@ message Envelope {
     // reserved: tag 20 (set_element_attribute_batch) — удалён, не переиспользовать.
     RequestElementAttribute  request_element_attribute   = 21; // backend -> screen
     ElementAttributeState    element_attribute_state     = 22; // screen -> backend
+    PageSnapshot             page_snapshot               = 23; // screen -> backend (полный слепок страницы)
+    AttributeChanged         attribute_changed           = 24; // screen -> backend (дельта + ACK команды)
   }
 }
 
 // ---- Контроллер → Экран ----
 
-// Показать страницу по ID
+// Показать страницу по ID.
+// session_id — эпоха навигации, инкрементируется бэком при каждом переходе.
+// Все последующие сообщения по этой странице (SetElementAttribute,
+// PageSnapshot, AttributeChanged, ButtonEvent, InputEvent) должны нести
+// соответствующий session_id. Устаревшие сообщения получатель игнорирует.
 message ShowPage {
-  uint32 page_id = 1;
+  uint32 page_id    = 1;
+  uint32 session_id = 2;
 }
 
 // Установить текст элемента
@@ -102,6 +109,11 @@ enum ElementAttribute {
   ELEMENT_ATTRIBUTE_BORDER_WIDTH = 5;
   ELEMENT_ATTRIBUTE_TEXT_COLOR = 6;
   ELEMENT_ATTRIBUTE_TEXT_FONT = 7;
+  ELEMENT_ATTRIBUTE_VISIBLE = 8;   // bool
+  ELEMENT_ATTRIBUTE_TEXT    = 9;   // string
+  ELEMENT_ATTRIBUTE_VALUE   = 10;  // int32 (slider/bar/checkbox/switch)
+  ELEMENT_ATTRIBUTE_X       = 11;  // int32
+  ELEMENT_ATTRIBUTE_Y       = 12;  // int32
 }
 
 // Типизированный id шрифта для text.font.
@@ -114,6 +126,11 @@ enum ElementFont {
 }
 
 // Точечная запись одного атрибута элемента.
+// request_id — для ACK-сопоставления: экран в ответ пришлёт
+// AttributeChanged с in_reply_to_request = request_id и reason =
+// REASON_COMMAND_APPLIED. 0 означает "без ответа" (fire-and-forget).
+// session_id — эпоха страницы. 0 допустим для legacy-совместимости
+// (получатель не проверяет).
 message SetElementAttribute {
   uint32 element_id = 1;
   ElementAttribute attribute = 2;
@@ -121,7 +138,61 @@ message SetElementAttribute {
     int32 int_value = 3;
     uint32 color_value = 4; // RGB888
     ElementFont font_value = 5;
+    bool bool_value = 8;
+    string string_value = 9;
   }
+  uint32 request_id = 6;
+  uint32 session_id = 7;
+}
+
+// Причина изменения атрибута в AttributeChanged (экран → бэк).
+enum AttributeChangeReason {
+  REASON_UNKNOWN         = 0;
+  REASON_COMMAND_APPLIED = 1;  // ACK на SetElementAttribute
+  REASON_LAYOUT          = 2;  // LVGL сам пересчитал layout
+  REASON_USER_INPUT      = 3;  // пользователь ввёл/изменил
+  REASON_ANIMATION       = 4;  // итог анимации
+}
+
+// Универсальное значение одного атрибута.
+// Переиспользуется в PageSnapshot и AttributeChanged как кирпичик.
+message ElementAttributeValue {
+  ElementAttribute attribute = 1;
+  oneof value {
+    int32       int_value    = 2;
+    uint32      color_value  = 3;  // RGB888
+    ElementFont font_value   = 4;
+    bool        bool_value   = 5;
+    string      string_value = 6;
+  }
+}
+
+// Снимок состояния одного элемента в рамках PageSnapshot.
+message ElementSnapshot {
+  uint32 element_id = 1;
+  repeated ElementAttributeValue attributes = 2;
+}
+
+// Полный снимок состояния страницы (экран → бэк).
+// Отправляется экраном в ответ на ShowPage с тем же session_id.
+// Бэк применяет snapshot как каноничное состояние страницы.
+message PageSnapshot {
+  uint32 session_id = 1;
+  uint32 page_id    = 2;
+  repeated ElementSnapshot elements = 3;
+}
+
+// Точечная дельта изменения атрибута (экран → бэк).
+// Используется и как ACK команды (reason = REASON_COMMAND_APPLIED,
+// in_reply_to_request = request_id из SetElementAttribute),
+// и как спонтанное сообщение о layout/user input (in_reply_to_request = 0).
+message AttributeChanged {
+  uint32 session_id           = 1;
+  uint32 page_id              = 2;
+  uint32 element_id           = 3;
+  ElementAttributeValue value = 4;
+  AttributeChangeReason reason = 5;
+  uint32 in_reply_to_request  = 6;  // 0 если спонтанно
 }
 
 // ---- Экран → Контроллер ----
@@ -134,14 +205,18 @@ enum ButtonAction {
   REPEAT = 3;
 }
 
-// Нажатие кнопки или другого интерактивного элемента
+// Нажатие кнопки или другого интерактивного элемента.
+// session_id — эпоха страницы на момент события. Бэк игнорирует,
+// если уже перешёл на следующую страницу.
 message ButtonEvent {
   uint32 element_id = 1;
   uint32 page_id    = 2;  // с какой страницы пришло событие
   ButtonAction action = 3;
+  uint32 session_id = 4;
 }
 
-// Ввод данных пользователем (числовой input, поле текста)
+// Ввод данных пользователем (числовой input, поле текста).
+// session_id — эпоха страницы на момент события.
 message InputEvent {
   uint32 element_id = 1;
   uint32 page_id    = 2;
@@ -149,6 +224,7 @@ message InputEvent {
     int32  int_value    = 3;
     string string_value = 4;  // макс. 64 символа (см. machine.options)
   }
+  uint32 session_id = 5;
 }
 
 // Heartbeat — обе стороны шлют периодически для контроля связи

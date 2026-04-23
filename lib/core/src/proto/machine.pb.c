@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(Envelope, Envelope, 2)
+PB_BIND(Envelope, Envelope, 4)
 
 
 PB_BIND(ShowPage, ShowPage, AUTO)
@@ -28,6 +28,18 @@ PB_BIND(SetBatch, SetBatch, 2)
 
 
 PB_BIND(SetElementAttribute, SetElementAttribute, AUTO)
+
+
+PB_BIND(ElementAttributeValue, ElementAttributeValue, AUTO)
+
+
+PB_BIND(ElementSnapshot, ElementSnapshot, 2)
+
+
+PB_BIND(PageSnapshot, PageSnapshot, 4)
+
+
+PB_BIND(AttributeChanged, AttributeChanged, AUTO)
 
 
 PB_BIND(ButtonEvent, ButtonEvent, AUTO)
@@ -76,6 +88,8 @@ PB_BIND(RequestElementAttribute, RequestElementAttribute, AUTO)
 
 
 PB_BIND(ElementAttributeState, ElementAttributeState, AUTO)
+
+
 
 
 

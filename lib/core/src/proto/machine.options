@@ -36,3 +36,17 @@ SetBatch.values                 max_count:8
 
 # Service snapshot: ограничение числа динамических элементов в одном ответе.
 PageState.elements              max_count:8
+
+# ---- Новая объектная модель: PageSnapshot / AttributeChanged ----
+# Агрессивный вариант (B) лимитов. Бюджет на один Envelope ~ kMaxPayload=1024.
+# Худший случай PageSnapshot:
+#   16 элементов × (5 + 10 атрибутов × ~16 байт) = 16 × 165 = ~2640 байт.
+# Это превышает kMaxPayload. Поэтому реальный сценарий — страницы до ~10
+# элементов или смешанный набор атрибутов с короткими значениями.
+# Для страниц, где бюджет превышен, позже введём чанкование snapshot.
+ElementAttributeValue.string_value  max_size:48
+ElementSnapshot.attributes          max_count:10
+PageSnapshot.elements               max_count:16
+
+# SetElementAttribute теперь также может нести строку (ELEMENT_ATTRIBUTE_TEXT).
+SetElementAttribute.string_value    max_size:48
