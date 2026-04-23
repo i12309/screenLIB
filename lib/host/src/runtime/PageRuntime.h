@@ -76,7 +76,7 @@ public:
     // и иметь static constexpr uint32_t kPageId.
     template <typename T>
     bool navigateTo() {
-        static_assert(std::is_base_of_v<IPage, T>,
+        static_assert(std::is_base_of<IPage, T>::value,
                       "navigate target must inherit from screenlib::IPage");
         return swapCurrent(std::unique_ptr<IPage>(new T()), &makePage<T>, T::kPageId);
     }
