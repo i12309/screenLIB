@@ -31,6 +31,8 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_set_element_attribute_tag: return "set_element_attribute";
         case Envelope_request_element_attribute_tag: return "request_element_attribute";
         case Envelope_element_attribute_state_tag: return "element_attribute_state";
+        case Envelope_page_snapshot_tag: return "page_snapshot";
+        case Envelope_attribute_changed_tag: return "attribute_changed";
         default: return "unknown";
     }
 }
