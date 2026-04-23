@@ -59,6 +59,12 @@ bool ScreenBridge::sendEnvelope(const Envelope& env) {
     return ok;
 }
 
+Envelope& ScreenBridge::prepareTxEnvelope(pb_size_t payloadTag) {
+    _txEnvelope = Envelope_init_zero;
+    _txEnvelope.which_payload = payloadTag;
+    return _txEnvelope;
+}
+
 size_t ScreenBridge::processIncoming() {
     _transport.tick();
 
@@ -83,8 +89,7 @@ size_t ScreenBridge::processIncoming() {
 
         FrameCodec::Frame frame;
         while (_frameCodec.popFrame(frame)) {
-            Envelope env{};
-            if (!ProtoCodec::decode(frame.payload, frame.payloadLen, env)) {
+            if (!ProtoCodec::decode(frame.payload, frame.payloadLen, _rxEnvelope)) {
                 SCREENLIB_LOGW(kBridgeLogTag,
                                "rx decode failed payload_len=%u seq=%u",
                                static_cast<unsigned>(frame.payloadLen),
@@ -93,11 +98,11 @@ size_t ScreenBridge::processIncoming() {
             }
             SCREENLIB_LOGT(kBridgeLogTag,
                            "rx payload=%s(%u) payload_len=%u seq=%u",
-                           screenlib_payload_name(env.which_payload),
-                           static_cast<unsigned>(env.which_payload),
+                           screenlib_payload_name(_rxEnvelope.which_payload),
+                           static_cast<unsigned>(_rxEnvelope.which_payload),
                            static_cast<unsigned>(frame.payloadLen),
                            static_cast<unsigned>(frame.seq));
-            dispatchEnvelope(env);
+            dispatchEnvelope(_rxEnvelope);
             processed++;
         }
     }
@@ -106,39 +111,34 @@ size_t ScreenBridge::processIncoming() {
 }
 
 bool ScreenBridge::showPage(uint32_t pageId) {
-    Envelope env{};
-    env.which_payload = Envelope_show_page_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_show_page_tag);
     env.payload.show_page.page_id = pageId;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::setText(uint32_t elementId, const char* text) {
-    Envelope env{};
-    env.which_payload = Envelope_set_text_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_text_tag);
     env.payload.set_text.element_id = elementId;
     copyTextSafe(env.payload.set_text.text, sizeof(env.payload.set_text.text), text);
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::setValue(uint32_t elementId, int32_t value) {
-    Envelope env{};
-    env.which_payload = Envelope_set_value_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_value_tag);
     env.payload.set_value.element_id = elementId;
     env.payload.set_value.value = value;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::setVisible(uint32_t elementId, bool visible) {
-    Envelope env{};
-    env.which_payload = Envelope_set_visible_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_visible_tag);
     env.payload.set_visible.element_id = elementId;
     env.payload.set_visible.visible = visible;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) {
-    Envelope env{};
-    env.which_payload = Envelope_set_color_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_color_tag);
     env.payload.set_color.element_id = elementId;
     env.payload.set_color.bg_color = bgColor;
     env.payload.set_color.fg_color = fgColor;
@@ -146,8 +146,7 @@ bool ScreenBridge::setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgCol
 }
 
 bool ScreenBridge::sendHeartbeat(uint32_t uptimeMs) {
-    Envelope env{};
-    env.which_payload = Envelope_heartbeat_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_heartbeat_tag);
     env.payload.heartbeat.uptime_ms = uptimeMs;
     return sendEnvelope(env);
 }
@@ -159,8 +158,7 @@ bool ScreenBridge::setElementAttribute(const SetElementAttribute& attr) {
         return false;
     }
 
-    Envelope env{};
-    env.which_payload = Envelope_set_element_attribute_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_element_attribute_tag);
     env.payload.set_element_attribute = safeAttr;
     return sendEnvelope(env);
 }
@@ -170,8 +168,7 @@ bool ScreenBridge::requestElementAttribute(uint32_t elementId,
                                            ElementAttribute attribute,
                                            uint32_t pageId,
                                            uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_request_element_attribute_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_request_element_attribute_tag);
     env.payload.request_element_attribute.request_id = requestId;
     env.payload.request_element_attribute.page_id = pageId;
     env.payload.request_element_attribute.element_id = elementId;
@@ -183,8 +180,7 @@ bool ScreenBridge::sendBatch(const SetBatch& batch) {
     SetBatch safeBatch{};
     sanitizeBatch(batch, safeBatch);
 
-    Envelope env{};
-    env.which_payload = Envelope_set_batch_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_set_batch_tag);
     env.payload.set_batch = safeBatch;
 
     if (sendEnvelope(env)) {
@@ -195,38 +191,33 @@ bool ScreenBridge::sendBatch(const SetBatch& batch) {
 }
 
 bool ScreenBridge::sendHello(const DeviceInfo& deviceInfo) {
-    Envelope env{};
-    env.which_payload = Envelope_hello_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_hello_tag);
     env.payload.hello.has_device_info = true;
     env.payload.hello.device_info = deviceInfo;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::requestDeviceInfo(uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_request_device_info_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_request_device_info_tag);
     env.payload.request_device_info.request_id = requestId;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::requestCurrentPage(uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_request_current_page_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_request_current_page_tag);
     env.payload.request_current_page.request_id = requestId;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::requestPageState(uint32_t pageId, uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_request_page_state_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_request_page_state_tag);
     env.payload.request_page_state.request_id = requestId;
     env.payload.request_page_state.page_id = pageId;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::requestElementState(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_request_element_state_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_request_element_state_tag);
     env.payload.request_element_state.request_id = requestId;
     env.payload.request_element_state.page_id = pageId;
     env.payload.request_element_state.element_id = elementId;
@@ -234,38 +225,33 @@ bool ScreenBridge::requestElementState(uint32_t elementId, uint32_t pageId, uint
 }
 
 bool ScreenBridge::sendDeviceInfo(const DeviceInfo& deviceInfo) {
-    Envelope env{};
-    env.which_payload = Envelope_device_info_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_device_info_tag);
     env.payload.device_info = deviceInfo;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
-    Envelope env{};
-    env.which_payload = Envelope_current_page_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_current_page_tag);
     env.payload.current_page.request_id = requestId;
     env.payload.current_page.page_id = pageId;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::sendPageState(const PageState& pageState) {
-    Envelope env{};
-    env.which_payload = Envelope_page_state_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_page_state_tag);
     env.payload.page_state = pageState;
     return sendEnvelope(env);
 }
 
 bool ScreenBridge::sendElementState(const ElementState& elementState) {
-    Envelope env{};
-    env.which_payload = Envelope_element_state_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_element_state_tag);
     env.payload.element_state = elementState;
     return sendEnvelope(env);
 }
 
 // Типизированный ответ на request_element_attribute.
 bool ScreenBridge::sendElementAttributeState(const ElementAttributeState& state) {
-    Envelope env{};
-    env.which_payload = Envelope_element_attribute_state_tag;
+    Envelope& env = prepareTxEnvelope(Envelope_element_attribute_state_tag);
     env.payload.element_attribute_state = state;
     return sendEnvelope(env);
 }

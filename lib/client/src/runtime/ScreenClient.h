@@ -71,6 +71,7 @@ private:
     void* _eventUser = nullptr;
 
     Envelope _uiEvents[kUiEventQueueSize] = {};
+    Envelope _scratchEnvelope = Envelope_init_zero;
     size_t _uiEventHead = 0;
     size_t _uiEventTail = 0;
     size_t _uiEventCount = 0;
@@ -85,6 +86,7 @@ private:
     bool flushUiEvents();
 
     bool sendOutgoingEnvelope(const Envelope& env);
+    Envelope& prepareEnvelope(pb_size_t payloadTag);
 
     static void copyTextSafe(char* dst, size_t dstSize, const char* src);
 };

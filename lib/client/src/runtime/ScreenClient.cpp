@@ -7,6 +7,12 @@ namespace screenlib::client {
 ScreenClient::ScreenClient(ITransport& transport)
     : _transport(transport), _bridge(transport) {}
 
+Envelope& ScreenClient::prepareEnvelope(pb_size_t payloadTag) {
+    _scratchEnvelope = Envelope_init_zero;
+    _scratchEnvelope.which_payload = payloadTag;
+    return _scratchEnvelope;
+}
+
 void ScreenClient::setUiAdapter(screenlib::adapter::IUiAdapter* uiAdapter) {
     // Отвязываем sink от старого адаптера, чтобы не оставить висячий обработчик.
     if (_uiAdapter != nullptr && _initialized) {
@@ -65,15 +71,13 @@ void ScreenClient::setEventHandler(EventHandler handler, void* userData) {
 }
 
 bool ScreenClient::sendHeartbeat(uint32_t uptimeMs) {
-    Envelope env{};
-    env.which_payload = Envelope_heartbeat_tag;
+    Envelope& env = prepareEnvelope(Envelope_heartbeat_tag);
     env.payload.heartbeat.uptime_ms = uptimeMs;
     return sendOutgoingEnvelope(env);
 }
 
 bool ScreenClient::sendButtonEvent(uint32_t elementId, uint32_t pageId, ButtonAction action) {
-    Envelope env{};
-    env.which_payload = Envelope_button_event_tag;
+    Envelope& env = prepareEnvelope(Envelope_button_event_tag);
     env.payload.button_event.element_id = elementId;
     env.payload.button_event.page_id = pageId;
     env.payload.button_event.action = action;
@@ -81,8 +85,7 @@ bool ScreenClient::sendButtonEvent(uint32_t elementId, uint32_t pageId, ButtonAc
 }
 
 bool ScreenClient::sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value) {
-    Envelope env{};
-    env.which_payload = Envelope_input_event_tag;
+    Envelope& env = prepareEnvelope(Envelope_input_event_tag);
     env.payload.input_event.element_id = elementId;
     env.payload.input_event.page_id = pageId;
     env.payload.input_event.which_value = InputEvent_int_value_tag;
@@ -91,8 +94,7 @@ bool ScreenClient::sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_
 }
 
 bool ScreenClient::sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text) {
-    Envelope env{};
-    env.which_payload = Envelope_input_event_tag;
+    Envelope& env = prepareEnvelope(Envelope_input_event_tag);
     env.payload.input_event.element_id = elementId;
     env.payload.input_event.page_id = pageId;
     env.payload.input_event.which_value = InputEvent_string_value_tag;
