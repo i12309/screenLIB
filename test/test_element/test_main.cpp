@@ -120,9 +120,10 @@ void test_signal_storage_fits_multiple_small_captures() {
 void test_elements_are_constructible() {
     // Этот тест — в первую очередь compile-time: он дергает конструкторы всех
     // типов элементов, чтобы инстанцировать шаблоны Property.
-    screenlib::Button btn(nullptr, 42);
-    screenlib::Panel  pnl(nullptr, 43);
-    screenlib::Text   txt(nullptr, 44);
+    auto* page = static_cast<screenlib::IPage*>(nullptr);
+    screenlib::Button btn(page, 42);
+    screenlib::Panel  pnl(page, 43);
+    screenlib::Text   txt(page, 44);
 
     TEST_ASSERT_EQUAL_UINT32(42, btn.id());
     TEST_ASSERT_EQUAL_UINT32(43, pnl.id());
@@ -133,7 +134,7 @@ void test_elements_are_constructible() {
 }
 
 void test_button_onClick_captures_this_like() {
-    screenlib::Button btn(nullptr, 1);
+    screenlib::Button btn(static_cast<screenlib::IPage*>(nullptr), 1);
 
     int clicks = 0;
     int* pClicks = &clicks;

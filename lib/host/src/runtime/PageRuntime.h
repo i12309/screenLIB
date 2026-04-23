@@ -190,6 +190,8 @@ class IPage {
 public:
     virtual ~IPage() = default;
     virtual uint32_t pageId() const = 0;
+    PageRuntime* runtime() { return _runtime; }
+    const PageRuntime* runtime() const { return _runtime; }
 
 protected:
     virtual void onShow() {}
@@ -208,8 +210,6 @@ protected:
         (void)elementId;
         (void)text;
     }
-
-    PageRuntime* runtime() { return _runtime; }
 
 private:
     PageRuntime* _runtime = nullptr;

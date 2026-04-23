@@ -107,24 +107,24 @@ class Property;
 template <ElementAttribute A>
 class Property<int32_t, A> {
 public:
-    Property(PageRuntime* rt, uint32_t elementId) : _rt(rt), _elementId(elementId) {}
+    Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator int32_t() const {
-        return _rt->model().getInt(_elementId, A);
+        return _page->runtime()->model().getInt(_elementId, A);
     }
 
     Property& operator=(int32_t v) {
-        _rt->model().setInt(_elementId, A, v);
+        _page->runtime()->model().setInt(_elementId, A, v);
         ElementAttributeValue eav{};
         eav.attribute = A;
         eav.which_value = ElementAttributeValue_int_value_tag;
         eav.value.int_value = v;
-        _rt->sendSetAttribute(_elementId, eav);
+        _page->runtime()->sendSetAttribute(_elementId, eav);
         return *this;
     }
 
 private:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _elementId;
 };
 
@@ -132,24 +132,24 @@ private:
 template <ElementAttribute A>
 class Property<bool, A> {
 public:
-    Property(PageRuntime* rt, uint32_t elementId) : _rt(rt), _elementId(elementId) {}
+    Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator bool() const {
-        return _rt->model().getBool(_elementId, A);
+        return _page->runtime()->model().getBool(_elementId, A);
     }
 
     Property& operator=(bool v) {
-        _rt->model().setBool(_elementId, A, v);
+        _page->runtime()->model().setBool(_elementId, A, v);
         ElementAttributeValue eav{};
         eav.attribute = A;
         eav.which_value = ElementAttributeValue_bool_value_tag;
         eav.value.bool_value = v;
-        _rt->sendSetAttribute(_elementId, eav);
+        _page->runtime()->sendSetAttribute(_elementId, eav);
         return *this;
     }
 
 private:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _elementId;
 };
 
@@ -157,24 +157,24 @@ private:
 template <ElementAttribute A>
 class Property<uint32_t, A> {
 public:
-    Property(PageRuntime* rt, uint32_t elementId) : _rt(rt), _elementId(elementId) {}
+    Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator uint32_t() const {
-        return _rt->model().getColor(_elementId, A);
+        return _page->runtime()->model().getColor(_elementId, A);
     }
 
     Property& operator=(uint32_t v) {
-        _rt->model().setColor(_elementId, A, v);
+        _page->runtime()->model().setColor(_elementId, A, v);
         ElementAttributeValue eav{};
         eav.attribute = A;
         eav.which_value = ElementAttributeValue_color_value_tag;
         eav.value.color_value = v & 0x00FFFFFFu;
-        _rt->sendSetAttribute(_elementId, eav);
+        _page->runtime()->sendSetAttribute(_elementId, eav);
         return *this;
     }
 
 private:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _elementId;
 };
 
@@ -182,24 +182,24 @@ private:
 template <ElementAttribute A>
 class Property<ElementFont, A> {
 public:
-    Property(PageRuntime* rt, uint32_t elementId) : _rt(rt), _elementId(elementId) {}
+    Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator ElementFont() const {
-        return _rt->model().getFont(_elementId, A);
+        return _page->runtime()->model().getFont(_elementId, A);
     }
 
     Property& operator=(ElementFont v) {
-        _rt->model().setFont(_elementId, A, v);
+        _page->runtime()->model().setFont(_elementId, A, v);
         ElementAttributeValue eav{};
         eav.attribute = A;
         eav.which_value = ElementAttributeValue_font_value_tag;
         eav.value.font_value = v;
-        _rt->sendSetAttribute(_elementId, eav);
+        _page->runtime()->sendSetAttribute(_elementId, eav);
         return *this;
     }
 
 private:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _elementId;
 };
 
@@ -207,14 +207,14 @@ private:
 template <ElementAttribute A>
 class Property<const char*, A> {
 public:
-    Property(PageRuntime* rt, uint32_t elementId) : _rt(rt), _elementId(elementId) {}
+    Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator const char*() const {
-        return _rt->model().getString(_elementId, A);
+        return _page->runtime()->model().getString(_elementId, A);
     }
 
     Property& operator=(const char* v) {
-        _rt->model().setString(_elementId, A, v);
+        _page->runtime()->model().setString(_elementId, A, v);
         ElementAttributeValue eav{};
         eav.attribute = A;
         eav.which_value = ElementAttributeValue_string_value_tag;
@@ -222,12 +222,12 @@ public:
         const char* src = (v != nullptr) ? v : "";
         std::strncpy(eav.value.string_value, src, sizeof(eav.value.string_value) - 1);
         eav.value.string_value[sizeof(eav.value.string_value) - 1] = '\0';
-        _rt->sendSetAttribute(_elementId, eav);
+        _page->runtime()->sendSetAttribute(_elementId, eav);
         return *this;
     }
 
 private:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _elementId;
 };
 
@@ -242,21 +242,22 @@ private:
 // ============================================================
 class ElementBase {
 public:
-    ElementBase(PageRuntime* rt, uint32_t elementId)
-      : _rt(rt), _id(elementId)
-      , visible(rt, elementId)
-      , width  (rt, elementId)
-      , height (rt, elementId) {}
+    ElementBase(IPage* page, uint32_t elementId)
+      : _page(page), _id(elementId)
+      , visible(page, elementId)
+      , width  (page, elementId)
+      , height (page, elementId) {}
 
     uint32_t id() const { return _id; }
-    PageRuntime* runtime() { return _rt; }
+    IPage* page() { return _page; }
+    const IPage* page() const { return _page; }
 
     Property<bool,    ELEMENT_ATTRIBUTE_VISIBLE>         visible;
     Property<int32_t, ELEMENT_ATTRIBUTE_POSITION_WIDTH>  width;
     Property<int32_t, ELEMENT_ATTRIBUTE_POSITION_HEIGHT> height;
 
 protected:
-    PageRuntime* _rt;
+    IPage* _page;
     uint32_t _id;
 };
 
@@ -265,11 +266,11 @@ protected:
 // ------------------------------------------------------------
 class Button : public ElementBase {
 public:
-    Button(PageRuntime* rt, uint32_t elementId)
-      : ElementBase(rt, elementId)
-      , text     (rt, elementId)
-      , bgColor  (rt, elementId)
-      , textColor(rt, elementId) {}
+    Button(IPage* page, uint32_t elementId)
+      : ElementBase(page, elementId)
+      , text     (page, elementId)
+      , bgColor  (page, elementId)
+      , textColor(page, elementId) {}
 
     Property<const char*, ELEMENT_ATTRIBUTE_TEXT>             text;
     Property<uint32_t,    ELEMENT_ATTRIBUTE_BACKGROUND_COLOR> bgColor;
@@ -283,11 +284,11 @@ public:
 // ------------------------------------------------------------
 class Panel : public ElementBase {
 public:
-    Panel(PageRuntime* rt, uint32_t elementId)
-      : ElementBase(rt, elementId)
-      , x      (rt, elementId)
-      , y      (rt, elementId)
-      , bgColor(rt, elementId) {}
+    Panel(IPage* page, uint32_t elementId)
+      : ElementBase(page, elementId)
+      , x      (page, elementId)
+      , y      (page, elementId)
+      , bgColor(page, elementId) {}
 
     Property<int32_t,  ELEMENT_ATTRIBUTE_X>                x;
     Property<int32_t,  ELEMENT_ATTRIBUTE_Y>                y;
@@ -299,11 +300,11 @@ public:
 // ------------------------------------------------------------
 class Text : public ElementBase {
 public:
-    Text(PageRuntime* rt, uint32_t elementId)
-      : ElementBase(rt, elementId)
-      , text     (rt, elementId)
-      , textColor(rt, elementId)
-      , font     (rt, elementId) {}
+    Text(IPage* page, uint32_t elementId)
+      : ElementBase(page, elementId)
+      , text     (page, elementId)
+      , textColor(page, elementId)
+      , font     (page, elementId) {}
 
     Property<const char*, ELEMENT_ATTRIBUTE_TEXT>       text;
     Property<uint32_t,    ELEMENT_ATTRIBUTE_TEXT_COLOR> textColor;
