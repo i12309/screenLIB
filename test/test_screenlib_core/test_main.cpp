@@ -4,19 +4,16 @@
 
 #include <unity.h>
 
-#include "config/ScreenConfig.h"
-#include "frame/FrameCodec.h"
-#include "manager/ScreenManager.h"
-#include "proto/ProtoCodec.h"
 #include "bridge/ScreenBridge.h"
-#include "system/ScreenSystem.h"
+#include "frame/FrameCodec.h"
+#include "proto/ProtoCodec.h"
 
 void setUp(void) {}
 void tearDown(void) {}
 
 namespace {
 
-// Простой mock транспорта для unit-тестов.
+// Простой mock транспорта для unit-тестов ScreenBridge.
 class MockTransport : public ITransport {
 public:
     bool isConnected = true;
@@ -47,8 +44,6 @@ public:
             rx.push_back(data[i]);
         }
     }
-
-    void clearTx() { tx.clear(); }
 };
 
 bool decodeFirstTxEnvelope(const MockTransport& transport, Envelope& out) {
@@ -192,210 +187,6 @@ void test_screen_bridge_attribute_helpers_encode_envelopes() {
     TEST_ASSERT_TRUE(out[2].payload.element_attribute_state.found);
 }
 
-void test_screen_manager_routes_by_mode() {
-    MockTransport physicalTransport;
-    MockTransport webTransport;
-    ScreenBridge physicalBridge(physicalTransport);
-    ScreenBridge webBridge(webTransport);
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = true;
-    cfg.web.enabled = true;
-    cfg.mirrorMode = screenlib::MirrorMode::PhysicalOnly;
-
-    screenlib::ScreenManager manager;
-    TEST_ASSERT_TRUE(manager.init(cfg));
-    manager.bindPhysical(&physicalBridge);
-    manager.bindWeb(&webBridge);
-
-    TEST_ASSERT_TRUE(manager.showPage(3));
-    TEST_ASSERT_GREATER_THAN(0u, physicalTransport.tx.size());
-    TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(webTransport.tx.size()));
-
-    physicalTransport.clearTx();
-    webTransport.clearTx();
-    cfg.mirrorMode = screenlib::MirrorMode::Both;
-    TEST_ASSERT_TRUE(manager.init(cfg));
-
-    TEST_ASSERT_TRUE(manager.setText(10, "both"));
-    TEST_ASSERT_GREATER_THAN(0u, physicalTransport.tx.size());
-    TEST_ASSERT_GREATER_THAN(0u, webTransport.tx.size());
-}
-
-struct CapturedEvent {
-    int count = 0;
-    screenlib::ScreenEventContext ctx{};
-    pb_size_t tag = 0;
-} gCaptured;
-
-void onManagerEvent(const Envelope& env, const screenlib::ScreenEventContext& ctx, void* userData) {
-    (void)userData;
-    gCaptured.count++;
-    gCaptured.ctx = ctx;
-    gCaptured.tag = env.which_payload;
-}
-
-void test_screen_manager_receives_incoming_events_with_context() {
-    MockTransport physicalTransport;
-    MockTransport webTransport;
-    ScreenBridge physicalBridge(physicalTransport);
-    ScreenBridge webBridge(webTransport);
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = true;
-    cfg.web.enabled = true;
-    cfg.mirrorMode = screenlib::MirrorMode::Both;
-
-    screenlib::ScreenManager manager;
-    TEST_ASSERT_TRUE(manager.init(cfg));
-    manager.bindPhysical(&physicalBridge);
-    manager.bindWeb(&webBridge);
-    manager.setEventHandler(&onManagerEvent, nullptr);
-
-    gCaptured = CapturedEvent{};
-
-    Envelope eventEnv{};
-    eventEnv.which_payload = Envelope_button_event_tag;
-    eventEnv.payload.button_event.page_id = 2;
-    eventEnv.payload.button_event.element_id = 55;
-
-    std::vector<uint8_t> frame;
-    TEST_ASSERT_TRUE(buildFrameFromEnvelope(eventEnv, frame, 5));
-    physicalTransport.pushRx(frame.data(), frame.size());
-
-    manager.tick();
-
-    TEST_ASSERT_EQUAL_INT(1, gCaptured.count);
-    TEST_ASSERT_TRUE(gCaptured.ctx.isPhysical);
-    TEST_ASSERT_FALSE(gCaptured.ctx.isWeb);
-    TEST_ASSERT_EQUAL_UINT8(0, gCaptured.ctx.endpointId);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_button_event_tag, gCaptured.tag);
-}
-
-void test_screen_system_rejects_web_ws_client_on_host_side() {
-    screenlib::ScreenSystem screens;
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = false;
-    cfg.web.enabled = true;
-    cfg.web.type = screenlib::OutputType::WsClient;
-    strncpy(cfg.web.wsClient.url, "ws://127.0.0.1:8181/ws", sizeof(cfg.web.wsClient.url) - 1);
-    cfg.web.wsClient.url[sizeof(cfg.web.wsClient.url) - 1] = '\0';
-
-    TEST_ASSERT_FALSE(screens.init(cfg));
-    TEST_ASSERT_EQUAL_STRING("ws_client is client-side transport", screens.lastError());
-}
-
-void test_screen_system_mirror_mode_sends_to_both_endpoints() {
-    MockTransport physicalTransport;
-    MockTransport webTransport;
-    ScreenBridge physicalBridge(physicalTransport);
-    ScreenBridge webBridge(webTransport);
-
-    screenlib::ScreenSystem screens;
-    screens.bindPhysicalBridge(&physicalBridge);
-    screens.bindWebBridge(&webBridge);
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = true;
-    cfg.physical.type = screenlib::OutputType::WsServer;
-    cfg.physical.wsServer.port = 1881;
-    cfg.web.enabled = true;
-    cfg.web.type = screenlib::OutputType::WsServer;
-    cfg.web.wsServer.port = 1882;
-    cfg.mirrorMode = screenlib::MirrorMode::Both;
-
-    TEST_ASSERT_TRUE(screens.init(cfg));
-
-    TEST_ASSERT_TRUE(screens.showPage(11));
-    TEST_ASSERT_TRUE(screens.setText(51, "mirror"));
-
-    TEST_ASSERT_GREATER_THAN(0u, physicalTransport.tx.size());
-    TEST_ASSERT_GREATER_THAN(0u, webTransport.tx.size());
-}
-
-void test_screen_system_service_requests_route_to_both_endpoints() {
-    MockTransport physicalTransport;
-    MockTransport webTransport;
-    ScreenBridge physicalBridge(physicalTransport);
-    ScreenBridge webBridge(webTransport);
-
-    screenlib::ScreenSystem screens;
-    screens.bindPhysicalBridge(&physicalBridge);
-    screens.bindWebBridge(&webBridge);
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = true;
-    cfg.physical.type = screenlib::OutputType::WsServer;
-    cfg.physical.wsServer.port = 1991;
-    cfg.web.enabled = true;
-    cfg.web.type = screenlib::OutputType::WsServer;
-    cfg.web.wsServer.port = 1992;
-    cfg.mirrorMode = screenlib::MirrorMode::Both;
-
-    TEST_ASSERT_TRUE(screens.init(cfg));
-
-    TEST_ASSERT_TRUE(screens.requestDeviceInfo(301));
-    TEST_ASSERT_TRUE(screens.requestCurrentPage(302));
-    TEST_ASSERT_TRUE(screens.requestPageState(4, 303));
-
-    std::vector<Envelope> physicalOut;
-    std::vector<Envelope> webOut;
-    TEST_ASSERT_EQUAL_UINT32(3u, static_cast<uint32_t>(decodeAllTxEnvelopes(physicalTransport, physicalOut)));
-    TEST_ASSERT_EQUAL_UINT32(3u, static_cast<uint32_t>(decodeAllTxEnvelopes(webTransport, webOut)));
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_device_info_tag, physicalOut[0].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_current_page_tag, physicalOut[1].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_page_state_tag, physicalOut[2].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(303, physicalOut[2].payload.request_page_state.request_id);
-    TEST_ASSERT_EQUAL_UINT32(4, physicalOut[2].payload.request_page_state.page_id);
-}
-
-void test_screen_system_typed_attribute_helpers_route_to_both_endpoints() {
-    MockTransport physicalTransport;
-    MockTransport webTransport;
-    ScreenBridge physicalBridge(physicalTransport);
-    ScreenBridge webBridge(webTransport);
-
-    screenlib::ScreenSystem screens;
-    screens.bindPhysicalBridge(&physicalBridge);
-    screens.bindWebBridge(&webBridge);
-
-    screenlib::ScreenConfig cfg{};
-    cfg.physical.enabled = true;
-    cfg.physical.type = screenlib::OutputType::WsServer;
-    cfg.physical.wsServer.port = 2991;
-    cfg.web.enabled = true;
-    cfg.web.type = screenlib::OutputType::WsServer;
-    cfg.web.wsServer.port = 2992;
-    cfg.mirrorMode = screenlib::MirrorMode::Both;
-
-    TEST_ASSERT_TRUE(screens.init(cfg));
-
-    TEST_ASSERT_TRUE(screens.setElementWidth(110, 320));
-    TEST_ASSERT_TRUE(screens.setElementTextColor(111, 0x00AABBCCu));
-    TEST_ASSERT_TRUE(screens.setElementTextFont(111, ElementFont_ELEMENT_FONT_UI_M20));
-    TEST_ASSERT_TRUE(screens.requestElementTextFont(111, 9, 901));
-
-    std::vector<Envelope> physicalOut;
-    std::vector<Envelope> webOut;
-    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(physicalTransport, physicalOut)));
-    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(webTransport, webOut)));
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[0].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH,
-                             physicalOut[0].payload.set_element_attribute.attribute);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[1].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR,
-                             physicalOut[1].payload.set_element_attribute.attribute);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, physicalOut[2].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT,
-                             physicalOut[2].payload.set_element_attribute.attribute);
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, physicalOut[3].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(901, physicalOut[3].payload.request_element_attribute.request_id);
-    TEST_ASSERT_EQUAL_UINT32(9, physicalOut[3].payload.request_element_attribute.page_id);
-}
-
 struct BridgeCapture {
     int count = 0;
 } gBridgeCapture;
@@ -444,12 +235,6 @@ void run_all_tests() {
     RUN_TEST(test_screen_bridge_show_page_encodes_envelope);
     RUN_TEST(test_screen_bridge_service_helpers_encode_envelopes);
     RUN_TEST(test_screen_bridge_attribute_helpers_encode_envelopes);
-    RUN_TEST(test_screen_manager_routes_by_mode);
-    RUN_TEST(test_screen_manager_receives_incoming_events_with_context);
-    RUN_TEST(test_screen_system_rejects_web_ws_client_on_host_side);
-    RUN_TEST(test_screen_system_mirror_mode_sends_to_both_endpoints);
-    RUN_TEST(test_screen_system_service_requests_route_to_both_endpoints);
-    RUN_TEST(test_screen_system_typed_attribute_helpers_route_to_both_endpoints);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
 }
 

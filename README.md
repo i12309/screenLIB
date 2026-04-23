@@ -4,7 +4,7 @@
 
 Он содержит только транспорт, протокол, runtime и общие абстракции:
 - `core`: `ITransport`, frame/proto codec, protobuf-схемы (`machine.proto`, `machine.pb.*`), `ScreenBridge`;
-- `host`: host-side runtime (`ScreenSystem`, `ScreenManager`, `ScreenEndpoint`, page registry/controllers, host transports);
+- `host`: host-side runtime объектной модели (`PageRuntime`, `PageModel`, `Element`, `IPage`, host transports);
 - `client`: screen-side protocol runtime (`ScreenClient`, `CommandDispatcher`, client transports);
 - `adapter`: только API (`IUiAdapter`).
 

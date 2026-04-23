@@ -24,10 +24,7 @@ using RequestId = uint32_t;
 constexpr RequestId kInvalidRequestId = 0;
 
 // ------------------------------------------------------------------
-// PageRuntime — единственный runtime объектной модели.
-//
-// Заменяет собой устаревший квартет ScreenSystem/ScreenManager/
-// ScreenEndpoint/SinglePageRuntime.
+// PageRuntime — единственный runtime объектной модели страницы.
 //
 // Задачи:
 // - держит ровно одну активную страницу (IPage);
