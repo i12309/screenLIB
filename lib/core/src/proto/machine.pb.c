@@ -30,9 +30,6 @@ PB_BIND(SetBatch, SetBatch, 2)
 PB_BIND(SetElementAttribute, SetElementAttribute, AUTO)
 
 
-PB_BIND(SetElementAttributeBatch, SetElementAttributeBatch, AUTO)
-
-
 PB_BIND(ButtonEvent, ButtonEvent, AUTO)
 
 

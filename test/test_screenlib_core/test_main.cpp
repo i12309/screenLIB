@@ -162,14 +162,6 @@ void test_screen_bridge_attribute_helpers_encode_envelopes() {
     setAttr.value.int_value = 120;
     TEST_ASSERT_TRUE(bridge.setElementAttribute(setAttr));
 
-    SetElementAttributeBatch batch = SetElementAttributeBatch_init_zero;
-    batch.attributes_count = 1;
-    batch.attributes[0].element_id = 42;
-    batch.attributes[0].attribute = ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR;
-    batch.attributes[0].which_value = SetElementAttribute_color_value_tag;
-    batch.attributes[0].value.color_value = 0x00112233u;
-    TEST_ASSERT_TRUE(bridge.setElementAttributeBatch(batch));
-
     TEST_ASSERT_TRUE(bridge.requestElementAttribute(
         43, ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT, 7, 701));
 
@@ -184,24 +176,20 @@ void test_screen_bridge_attribute_helpers_encode_envelopes() {
     TEST_ASSERT_TRUE(bridge.sendElementAttributeState(state));
 
     std::vector<Envelope> out;
-    TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(3u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 
     TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, out[0].which_payload);
     TEST_ASSERT_EQUAL_UINT32(41, out[0].payload.set_element_attribute.element_id);
     TEST_ASSERT_EQUAL_UINT32(120, static_cast<uint32_t>(out[0].payload.set_element_attribute.value.int_value));
 
-    TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_batch_tag, out[1].which_payload);
-    TEST_ASSERT_EQUAL_UINT8(1, out[1].payload.set_element_attribute_batch.attributes_count);
-    TEST_ASSERT_EQUAL_UINT32(42, out[1].payload.set_element_attribute_batch.attributes[0].element_id);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, out[1].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(701, out[1].payload.request_element_attribute.request_id);
+    TEST_ASSERT_EQUAL_UINT32(7, out[1].payload.request_element_attribute.page_id);
+    TEST_ASSERT_EQUAL_UINT32(43, out[1].payload.request_element_attribute.element_id);
 
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, out[2].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(701, out[2].payload.request_element_attribute.request_id);
-    TEST_ASSERT_EQUAL_UINT32(7, out[2].payload.request_element_attribute.page_id);
-    TEST_ASSERT_EQUAL_UINT32(43, out[2].payload.request_element_attribute.element_id);
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[3].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(702, out[3].payload.element_attribute_state.request_id);
-    TEST_ASSERT_TRUE(out[3].payload.element_attribute_state.found);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(702, out[2].payload.element_attribute_state.request_id);
+    TEST_ASSERT_TRUE(out[2].payload.element_attribute_state.found);
 }
 
 void test_screen_manager_routes_by_mode() {

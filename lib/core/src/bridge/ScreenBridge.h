@@ -56,8 +56,6 @@ public:
     // Типизированные атрибуты UI (сторона host -> сторона screen).
     // С безопасной проверкой соответствия attribute <-> value.
     bool setElementAttribute(const SetElementAttribute& attr);
-    // Пакет типизированных атрибутов (с резервным переходом на split-отправку).
-    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     // Запрос одного типизированного атрибута у клиента экрана.
     bool requestElementAttribute(uint32_t elementId,
                                  ElementAttribute attribute,
@@ -82,7 +80,6 @@ public:
 private:
     static constexpr size_t kReadChunkSize = 256;
     static constexpr uint8_t kMaxBatchCount = 8;
-    static constexpr uint8_t kMaxAttributeBatchCount = 8;
 
     ITransport& _transport;
     FrameCodec _frameCodec;
@@ -110,9 +107,5 @@ private:
     bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor);
 
     // Валидация/нормализация типизированных атрибутов.
-    static uint8_t clampAttributeBatchCount(uint8_t value);
     static bool sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst);
-    static void sanitizeElementAttributeBatch(const SetElementAttributeBatch& src, SetElementAttributeBatch& dst);
-    // Резервный путь: отправка типизированного батча по одному атрибуту.
-    bool sendElementAttributeBatchSplit(const SetElementAttributeBatch& batch);
 };

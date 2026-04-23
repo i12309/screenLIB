@@ -46,11 +46,6 @@ bool ScreenEndpoint::setElementAttribute(const SetElementAttribute& attr) {
     return canUseBridge() && _bridge->setElementAttribute(attr);
 }
 
-// Пакет типизированных атрибутов.
-bool ScreenEndpoint::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
-    return canUseBridge() && _bridge->setElementAttributeBatch(batch);
-}
-
 bool ScreenEndpoint::sendHeartbeat(uint32_t uptimeMs) {
     return canUseBridge() && _bridge->sendHeartbeat(uptimeMs);
 }

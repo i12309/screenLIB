@@ -33,7 +33,6 @@ SetBatch.texts                  max_count:8
 SetBatch.colors                 max_count:8
 SetBatch.visibles               max_count:8
 SetBatch.values                 max_count:8
-SetElementAttributeBatch.attributes max_count:8
 
 # Service snapshot: ограничение числа динамических элементов в одном ответе.
 PageState.elements              max_count:8

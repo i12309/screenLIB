@@ -29,7 +29,6 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_request_element_state_tag: return "request_element_state";
         case Envelope_element_state_tag: return "element_state";
         case Envelope_set_element_attribute_tag: return "set_element_attribute";
-        case Envelope_set_element_attribute_batch_tag: return "set_element_attribute_batch";
         case Envelope_request_element_attribute_tag: return "request_element_attribute";
         case Envelope_element_attribute_state_tag: return "element_attribute_state";
         default: return "unknown";
@@ -162,26 +161,6 @@ bool ScreenBridge::setElementAttribute(const SetElementAttribute& attr) {
     env.which_payload = Envelope_set_element_attribute_tag;
     env.payload.set_element_attribute = safeAttr;
     return sendEnvelope(env);
-}
-
-// Типизированный batch. Если единый пакет не отправился, резервный переход на split.
-bool ScreenBridge::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
-    SetElementAttributeBatch safeBatch = SetElementAttributeBatch_init_zero;
-    sanitizeElementAttributeBatch(batch, safeBatch);
-
-    if (safeBatch.attributes_count == 0) {
-        return false;
-    }
-
-    Envelope env{};
-    env.which_payload = Envelope_set_element_attribute_batch_tag;
-    env.payload.set_element_attribute_batch = safeBatch;
-
-    if (sendEnvelope(env)) {
-        return true;
-    }
-
-    return sendElementAttributeBatchSplit(safeBatch);
 }
 
 // Типизированный get одного атрибута.
@@ -390,10 +369,6 @@ bool ScreenBridge::sendBatchSplit(const SetBatch& batch) {
     return true;
 }
 
-uint8_t ScreenBridge::clampAttributeBatchCount(uint8_t value) {
-    return value > kMaxAttributeBatchCount ? kMaxAttributeBatchCount : value;
-}
-
 bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst) {
     dst = SetElementAttribute_init_zero;
     dst.element_id = src.element_id;
@@ -442,27 +417,4 @@ bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetE
         default:
             return false;
     }
-}
-
-void ScreenBridge::sanitizeElementAttributeBatch(const SetElementAttributeBatch& src,
-                                                 SetElementAttributeBatch& dst) {
-    dst = SetElementAttributeBatch_init_zero;
-
-    const uint8_t count = clampAttributeBatchCount(static_cast<uint8_t>(src.attributes_count));
-    for (uint8_t i = 0; i < count; ++i) {
-        SetElementAttribute tmp = SetElementAttribute_init_zero;
-        if (sanitizeElementAttribute(src.attributes[i], tmp)) {
-            dst.attributes[dst.attributes_count++] = tmp;
-        }
-    }
-}
-
-// Split-отправка типизированного батча по одному атрибуту.
-bool ScreenBridge::sendElementAttributeBatchSplit(const SetElementAttributeBatch& batch) {
-    for (uint8_t i = 0; i < batch.attributes_count; ++i) {
-        if (!setElementAttribute(batch.attributes[i])) {
-            return false;
-        }
-    }
-    return true;
 }

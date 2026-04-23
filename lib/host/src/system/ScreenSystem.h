@@ -46,7 +46,6 @@ public:
     bool setVisible(uint32_t elementId, bool visible);
     // Универсальные типизированные set/get по одному атрибуту.
     bool setElementAttribute(const SetElementAttribute& attr);
-    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     bool requestElementAttribute(uint32_t elementId,
                                  ElementAttribute attribute,
                                  uint32_t pageId = 0,

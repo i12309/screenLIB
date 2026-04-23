@@ -40,8 +40,6 @@ public:
     bool setVisible(uint32_t elementId, bool visible);
     // Точечная типизированная запись одного атрибута элемента.
     bool setElementAttribute(const SetElementAttribute& attr);
-    // Пакет типизированных атрибутов (несколько SetElementAttribute).
-    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
     bool requestDeviceInfo(uint32_t requestId = 0);
@@ -77,7 +75,6 @@ private:
     bool sendSetVisibleByMode(uint32_t elementId, bool visible);
     // Маршрутизация типизированных операций с учетом MirrorMode.
     bool sendSetElementAttributeByMode(const SetElementAttribute& attr);
-    bool sendSetElementAttributeBatchByMode(const SetElementAttributeBatch& batch);
     bool sendHeartbeatByMode(uint32_t uptimeMs);
     bool sendBatchByMode(const SetBatch& batch);
     bool sendRequestDeviceInfoByMode(uint32_t requestId);

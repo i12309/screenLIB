@@ -61,11 +61,6 @@ bool ScreenManager::setElementAttribute(const SetElementAttribute& attr) {
     return sendSetElementAttributeByMode(attr);
 }
 
-// Пакет типизированных атрибутов.
-bool ScreenManager::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
-    return sendSetElementAttributeBatchByMode(batch);
-}
-
 bool ScreenManager::sendHeartbeat(uint32_t uptimeMs) {
     return sendHeartbeatByMode(uptimeMs);
 }
@@ -184,21 +179,6 @@ bool ScreenManager::sendSetElementAttributeByMode(const SetElementAttribute& att
         case MirrorMode::Both: {
             const bool okPhysical = _physical.setElementAttribute(attr);
             const bool okWeb = _web.setElementAttribute(attr);
-            return okPhysical || okWeb;
-        }
-    }
-    return false;
-}
-
-bool ScreenManager::sendSetElementAttributeBatchByMode(const SetElementAttributeBatch& batch) {
-    switch (effectiveMode()) {
-        case MirrorMode::PhysicalOnly:
-            return _physical.setElementAttributeBatch(batch);
-        case MirrorMode::WebOnly:
-            return _web.setElementAttributeBatch(batch);
-        case MirrorMode::Both: {
-            const bool okPhysical = _physical.setElementAttributeBatch(batch);
-            const bool okWeb = _web.setElementAttributeBatch(batch);
             return okPhysical || okWeb;
         }
     }

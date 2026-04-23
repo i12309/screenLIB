@@ -45,7 +45,6 @@ public:
     bool setVisible(uint32_t elementId, bool visible);
     // Типизированные команды изменения атрибутов UI.
     bool setElementAttribute(const SetElementAttribute& attr);
-    bool setElementAttributeBatch(const SetElementAttributeBatch& batch);
     bool sendHeartbeat(uint32_t uptimeMs);
     bool sendBatch(const SetBatch& batch);
 

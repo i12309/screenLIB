@@ -115,10 +115,6 @@ bool ScreenSystem::setElementAttribute(const SetElementAttribute& attr) {
     return _manager.setElementAttribute(attr);
 }
 
-bool ScreenSystem::setElementAttributeBatch(const SetElementAttributeBatch& batch) {
-    return _manager.setElementAttributeBatch(batch);
-}
-
 bool ScreenSystem::requestElementAttribute(uint32_t elementId,
                                            ElementAttribute attribute,
                                            uint32_t pageId,

@@ -17,6 +17,10 @@ syntax = "proto3";
 
 // Обёртка — всегда передаётся как payload в FrameCodec
 message Envelope {
+  // Исторически использованные, но удалённые теги в oneof payload.
+  // Не переиспользовать во избежание конфликта с клиентами старых версий.
+  reserved 20;
+  reserved "set_element_attribute_batch";
   oneof payload {
     ShowPage    show_page    = 1;  // показать страницу
     SetText     set_text     = 2;  // текст элемента
@@ -39,7 +43,7 @@ message Envelope {
     RequestElementState request_element_state= 17; // backend -> screen
     ElementState        element_state        = 18; // screen -> backend
     SetElementAttribute      set_element_attribute       = 19; // точечная запись style/layout атрибута
-    SetElementAttributeBatch set_element_attribute_batch = 20; // пакетная запись нескольких атрибутов
+    // reserved: tag 20 (set_element_attribute_batch) — удалён, не переиспользовать.
     RequestElementAttribute  request_element_attribute   = 21; // backend -> screen
     ElementAttributeState    element_attribute_state     = 22; // screen -> backend
   }
@@ -118,11 +122,6 @@ message SetElementAttribute {
     uint32 color_value = 4; // RGB888
     ElementFont font_value = 5;
   }
-}
-
-// Пакетная запись нескольких атрибутов.
-message SetElementAttributeBatch {
-  repeated SetElementAttribute attributes = 1;
 }
 
 // ---- Экран → Контроллер ----

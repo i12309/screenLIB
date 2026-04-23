@@ -136,12 +136,6 @@ public:
         return true;
     }
 
-    bool applyElementAttributeBatch(const SetElementAttributeBatch& batch) override {
-        applyElementAttributeBatchCount++;
-        lastElementAttributeBatch = batch;
-        return true;
-    }
-
     bool applyBatch(const SetBatch& batch) override {
         applyBatchCount++;
         lastBatch = batch;
@@ -187,7 +181,6 @@ public:
     int setVisibleCount = 0;
     int setColorCount = 0;
     int setElementAttributeCount = 0;
-    int applyElementAttributeBatchCount = 0;
     int applyBatchCount = 0;
     int setEventSinkCalls = 0;
     int clearEventSinkCalls = 0;
@@ -204,7 +197,6 @@ public:
     uint32_t lastBgColor = 0;
     uint32_t lastFgColor = 0;
     SetElementAttribute lastElementAttribute = SetElementAttribute_init_zero;
-    SetElementAttributeBatch lastElementAttributeBatch = SetElementAttributeBatch_init_zero;
     SetBatch lastBatch = SetBatch_init_zero;
     std::vector<bool> emitResults;
 
@@ -325,17 +317,6 @@ void test_screen_client_incoming_commands_reach_ui() {
     setElementAttribute.payload.set_element_attribute.value.int_value = 3;
     TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttribute, 6));
 
-    Envelope setElementAttributeBatch{};
-    setElementAttributeBatch.which_payload = Envelope_set_element_attribute_batch_tag;
-    setElementAttributeBatch.payload.set_element_attribute_batch.attributes_count = 1;
-    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].element_id = 71;
-    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].attribute =
-        ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR;
-    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].which_value =
-        SetElementAttribute_color_value_tag;
-    setElementAttributeBatch.payload.set_element_attribute_batch.attributes[0].value.color_value = 0x00ABCDEFu;
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttributeBatch, 7));
-
     client.tick();
 
     TEST_ASSERT_EQUAL_INT(1, adapter.setTextCount);
@@ -365,16 +346,6 @@ void test_screen_client_incoming_commands_reach_ui() {
     TEST_ASSERT_EQUAL_INT(ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH, adapter.lastElementAttribute.attribute);
     TEST_ASSERT_EQUAL_UINT32(SetElementAttribute_int_value_tag, adapter.lastElementAttribute.which_value);
     TEST_ASSERT_EQUAL_INT32(3, adapter.lastElementAttribute.value.int_value);
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.applyElementAttributeBatchCount);
-    TEST_ASSERT_EQUAL_UINT8(1, adapter.lastElementAttributeBatch.attributes_count);
-    TEST_ASSERT_EQUAL_UINT32(71, adapter.lastElementAttributeBatch.attributes[0].element_id);
-    TEST_ASSERT_EQUAL_INT(ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR,
-                          adapter.lastElementAttributeBatch.attributes[0].attribute);
-    TEST_ASSERT_EQUAL_UINT32(SetElementAttribute_color_value_tag,
-                             adapter.lastElementAttributeBatch.attributes[0].which_value);
-    TEST_ASSERT_EQUAL_UINT32(0x00ABCDEFu,
-                             adapter.lastElementAttributeBatch.attributes[0].value.color_value);
 }
 
 void test_screen_client_tick_without_ui_adapter_is_safe() {
@@ -555,7 +526,6 @@ void test_screen_client_incoming_non_screen_envelope_does_not_touch_ui() {
     TEST_ASSERT_EQUAL_INT(0, adapter.setVisibleCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.setColorCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.setElementAttributeCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.applyElementAttributeBatchCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.applyBatchCount);
 }
 
