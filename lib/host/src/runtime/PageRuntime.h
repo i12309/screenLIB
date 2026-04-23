@@ -2,20 +2,24 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <type_traits>
 
 #include "pages/PageModel.h"
 #include "proto/machine.pb.h"
+#include "types/ScreenTypes.h"
+
+class ScreenBridge;  // fwd (лежит в global namespace, см. lib/core/src/bridge)
 
 namespace screenlib {
 
-class IPage;              // fwd, определён ниже
-class ScreenBridge;       // fwd
-struct ScreenConfig;      // fwd
+struct ScreenConfig;  // fwd
+class IPage;          // определён ниже
 
 // --- Результат отправки set-команды через PageRuntime ---
 
 // sendSetAttribute возвращает request_id, по которому позже придёт ACK.
-// 0 означает сбой отправки (очередь переполнена или bridge.send()/provisioning не прошёл).
+// 0 означает сбой отправки (очередь переполнена или bridge.send() не прошёл).
 using RequestId = uint32_t;
 constexpr RequestId kInvalidRequestId = 0;
 
@@ -26,34 +30,59 @@ constexpr RequestId kInvalidRequestId = 0;
 // ScreenEndpoint/SinglePageRuntime.
 //
 // Задачи:
-// - владеет одной или двумя ScreenBridge (physical/web);
 // - держит ровно одну активную страницу (IPage);
-// - ведёт локальную PageModel;
+// - ведёт локальную PageModel (каноничное состояние страницы);
 // - отправляет SetElementAttribute, ждёт ACK (AttributeChanged),
 //   реализует backpressure;
-// - дренирует очередь при navigateTo, ждёт PageSnapshot от экрана;
-// - при тайм-ауте/переполнении уходит в linkDown.
+// - при navigateTo дренирует очередь, шлёт ShowPage, ждёт PageSnapshot;
+// - при таймауте/переполнении уходит в linkDown и уведомляет слушателя.
 //
-// Полная реализация — в PageRuntime.cpp. Здесь только контракт.
+// Bridge (физический/web) сейчас привязываются извне через
+// attachPhysicalBridge/attachWebBridge. Автоподнятие из ScreenConfig
+// (UART/WsServer) будет добавлено в отдельном коммите.
 // ------------------------------------------------------------------
 class PageRuntime {
 public:
     using LinkListener = void (*)(bool up, void* user);
+    using PageFactory  = std::unique_ptr<IPage> (*)();
+
+    // --- Тайминги/лимиты ---
+
+    // Максимум отправленных команд без ACK. При превышении — linkDown.
+    static constexpr std::size_t kMaxPending = 64;
+    // Таймаут ожидания ACK на самую старую команду в очереди.
+    static constexpr uint32_t kLinkTimeoutMs = 2000;
+
+    PageRuntime() = default;
+    PageRuntime(const PageRuntime&) = delete;
+    PageRuntime& operator=(const PageRuntime&) = delete;
 
     // --- Lifecycle ---
 
-    // Инициализация транспорта по конфигу. Поднимает bridge(ы).
-    // Возвращает true при успехе, false — с текстом в lastError().
+    // Сохранить конфиг (mirrorMode и прочее). bridge(и) привязываются
+    // отдельно через attachPhysicalBridge/attachWebBridge.
     bool init(const ScreenConfig& cfg);
 
-    // Главный tick. Прокачивает bridge(ы), проверяет таймауты очереди.
+    // Главный tick. Прокачивает bridge(ы), проверяет таймауты очереди
+    // и текущую страницу (onTick).
     void tick();
 
-    // Переход на страницу типа T (должна наследоваться от IPage и иметь kPageId).
-    template <typename T>
-    bool navigateTo();
+    // Привязать bridge физического экрана. Устанавливает handler входящих.
+    void attachPhysicalBridge(ScreenBridge* bridge);
+    // Привязать bridge web-экрана.
+    void attachWebBridge(ScreenBridge* bridge);
 
-    // Вернуться на предыдущую страницу.
+    // Переход на страницу типа T. T должна наследоваться от IPage
+    // и иметь static constexpr uint32_t kPageId.
+    template <typename T>
+    bool navigateTo() {
+        static_assert(std::is_base_of_v<IPage, T>,
+                      "navigate target must inherit from screenlib::IPage");
+        return swapCurrent(std::unique_ptr<IPage>(new T()), &makePage<T>, T::kPageId);
+    }
+
+    // Вернуться на предыдущую страницу (если была). Эпоха не меняется
+    // только если это был тот же pageId; в остальных случаях — новая сессия.
     bool back();
 
     // --- State ---
@@ -67,46 +96,88 @@ public:
         _linkListenerUser = user;
     }
 
+    // --- Для тестов: инжекция источника времени ---
+
+    // По умолчанию — Arduino millis() на ARDUINO-сборках и
+    // std::chrono::steady_clock в нативных. setNowProvider переопределяет.
+    using NowProvider = uint32_t (*)();
+    void setNowProvider(NowProvider p) { _now = p; }
+
     // --- Для Element/Property (публично, т.к. вызывается из шаблонов) ---
 
     PageModel& model() { return _model; }
     const PageModel& model() const { return _model; }
 
     // Отправить SetElementAttribute с новым request_id.
-    // Параметр v.attribute + v.which_value + v.value задают что менять.
     // При успехе возвращает request_id, кладёт запись в _pending.
     // При сбое (очередь переполнена, bridge не готов, send() провалился)
-    // — возвращает kInvalidRequestId, помечает linkDown и сбрасывает запись.
+    // — возвращает kInvalidRequestId, помечает linkDown.
     RequestId sendSetAttribute(uint32_t elementId, const ElementAttributeValue& v);
 
     // --- Для страницы ---
 
-    IPage* currentPage() { return _current; }
+    IPage* currentPage() { return _current.get(); }
+    const IPage* currentPage() const { return _current.get(); }
     uint32_t currentPageId() const;
     uint32_t currentSessionId() const { return _model.sessionId(); }
 
 private:
-    // Здесь будет реальная реализация в .cpp. На этапе коммита 4 у нас только
-    // контракт, чтобы Element.h мог компилиться.
-    PageModel _model;
-    IPage* _current = nullptr;
+    template <typename T>
+    static std::unique_ptr<IPage> makePage() {
+        return std::unique_ptr<IPage>(new T());
+    }
 
-    // Заглушки полей (полный набор вводится в коммите 5).
+    // Ядро навигации: дренаж pending, onClose старой, установка новой,
+    // beginPage в модели, отправка ShowPage.
+    bool swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFactory, uint32_t pageId);
+
+    // Диспетчеризация входящего Envelope (колбэк от ScreenBridge).
+    static void onBridgeEnvelope(const Envelope& env, void* userData);
+    void onEnvelope(const Envelope& env);
+
+    // Отправка Envelope по mirrorMode. Возвращает true, если хотя бы один
+    // bridge принял сообщение.
+    bool sendEnvelopeByMode(const Envelope& env);
+
+    // Проверка таймаута на голове очереди. Вызывается из tick.
+    void checkPendingTimeouts();
+
+    // Пометить линк как up/down, позвать listener при изменении.
+    void setLinkUp(bool up);
+
+    // Удалить pending по request_id (линейный поиск). true если нашёл.
+    bool removePending(RequestId id);
+
+    // Получить текущее время (через _now или default).
+    uint32_t nowMs() const;
+
+    // --- Состояние ---
+
+    MirrorMode _mirrorMode = MirrorMode::PhysicalOnly;
+    ScreenBridge* _physical = nullptr;
+    ScreenBridge* _web = nullptr;
+
+    PageModel _model;
+    std::unique_ptr<IPage> _current;
+    PageFactory _currentFactory = nullptr;
+    PageFactory _previousFactory = nullptr;
+    uint32_t _sessionCounter = 0;  // монотонно растёт, эпоха = _sessionCounter
+
     bool _linkUp = true;
     LinkListener _linkListener = nullptr;
     void* _linkListenerUser = nullptr;
 
-    // Очередь ожидающих ACK.
     struct Pending {
         RequestId id = kInvalidRequestId;
         uint32_t elementId = 0;
         ElementAttribute attribute = ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN;
         uint32_t sentAtMs = 0;
     };
-    static constexpr std::size_t kMaxPending = 64;
     Pending _pending[kMaxPending];
     std::size_t _pendingCount = 0;
     RequestId _nextRequestId = 1;
+
+    NowProvider _now = nullptr;  // nullptr → использовать default monotonic_ms
 };
 
 // ------------------------------------------------------------------
