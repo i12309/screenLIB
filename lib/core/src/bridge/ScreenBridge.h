@@ -45,7 +45,7 @@ public:
     bool connected() const { return _transport.connected(); }
 
     // Базовые UI-команды (сторона host -> сторона screen).
-    bool showPage(uint32_t pageId);
+    bool showPage(uint32_t pageId, uint32_t sessionId = 0);
     bool setText(uint32_t elementId, const char* text);
     bool setValue(uint32_t elementId, int32_t value);
     bool setVisible(uint32_t elementId, bool visible);

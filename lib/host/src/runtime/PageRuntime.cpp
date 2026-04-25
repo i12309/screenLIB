@@ -142,12 +142,7 @@ bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFacto
     _model.beginPage(pageId, _sessionCounter);
 
     // 5. Отправить ShowPage. onShow вызовется позже при приёме PageSnapshot.
-    Envelope env{};
-    env.which_payload = Envelope_show_page_tag;
-    env.payload.show_page.page_id = pageId;
-    env.payload.show_page.session_id = _sessionCounter;
-
-    if (!sendEnvelopeByMode(env)) {
+    if (!sendShowPageByMode(pageId, _sessionCounter)) {
         SCREENLIB_LOGW(kLogTag, "swapCurrent: ShowPage send failed pageId=%u session=%u",
                        static_cast<unsigned>(pageId),
                        static_cast<unsigned>(_sessionCounter));
@@ -194,11 +189,7 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
         return kInvalidRequestId;
     }
 
-    Envelope env{};
-    env.which_payload = Envelope_set_element_attribute_tag;
-    env.payload.set_element_attribute = cmd;
-
-    if (!sendEnvelopeByMode(env)) {
+    if (!sendSetElementAttributeByMode(cmd)) {
         setLinkUp(false);
         return kInvalidRequestId;
     }
@@ -259,19 +250,39 @@ void PageRuntime::setLinkUp(bool up) {
 
 // ---------- Отправка по mirrorMode ----------
 
-bool PageRuntime::sendEnvelopeByMode(const Envelope& env) {
+bool PageRuntime::sendShowPageByMode(uint32_t pageId, uint32_t sessionId) {
     switch (_mirrorMode) {
         case MirrorMode::PhysicalOnly:
-            return _physical != nullptr && _physical->sendEnvelope(env);
+            return _physical != nullptr && _physical->showPage(pageId, sessionId);
         case MirrorMode::WebOnly:
-            return _web != nullptr && _web->sendEnvelope(env);
+            return _web != nullptr && _web->showPage(pageId, sessionId);
         case MirrorMode::Both: {
             bool any = false;
             if (_physical != nullptr) {
-                any = _physical->sendEnvelope(env) || any;
+                any = _physical->showPage(pageId, sessionId) || any;
             }
             if (_web != nullptr) {
-                any = _web->sendEnvelope(env) || any;
+                any = _web->showPage(pageId, sessionId) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
+bool PageRuntime::sendSetElementAttributeByMode(const SetElementAttribute& cmd) {
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr && _physical->setElementAttribute(cmd);
+        case MirrorMode::WebOnly:
+            return _web != nullptr && _web->setElementAttribute(cmd);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = _physical->setElementAttribute(cmd) || any;
+            }
+            if (_web != nullptr) {
+                any = _web->setElementAttribute(cmd) || any;
             }
             return any;
         }
@@ -280,6 +291,12 @@ bool PageRuntime::sendEnvelopeByMode(const Envelope& env) {
 }
 
 // ---------- Приём входящих ----------
+
+void PageRuntime::notifyDeviceInfo(const DeviceInfo& info) {
+    if (_deviceInfoListener != nullptr) {
+        _deviceInfoListener(info, _deviceInfoListenerUser);
+    }
+}
 
 void PageRuntime::onBridgeEnvelope(const Envelope& env, void* userData) {
     PageRuntime* self = static_cast<PageRuntime*>(userData);
@@ -290,6 +307,16 @@ void PageRuntime::onBridgeEnvelope(const Envelope& env, void* userData) {
 
 void PageRuntime::onEnvelope(const Envelope& env) {
     switch (env.which_payload) {
+        case Envelope_hello_tag:
+            if (env.payload.hello.has_device_info) {
+                notifyDeviceInfo(env.payload.hello.device_info);
+            }
+            break;
+
+        case Envelope_device_info_tag:
+            notifyDeviceInfo(env.payload.device_info);
+            break;
+
         case Envelope_page_snapshot_tag: {
             const PageSnapshot& snap = env.payload.page_snapshot;
             // Отбрасываем snapshot от устаревшей эпохи/страницы.

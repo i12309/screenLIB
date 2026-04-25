@@ -114,6 +114,10 @@ bool ScreenClient::sendHello(const DeviceInfo& deviceInfo) {
     return _bridge.sendHello(deviceInfo);
 }
 
+bool ScreenClient::sendDeviceInfo(const DeviceInfo& deviceInfo) {
+    return _bridge.sendDeviceInfo(deviceInfo);
+}
+
 bool ScreenClient::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
     return _bridge.sendCurrentPage(pageId, requestId);
 }

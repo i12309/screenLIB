@@ -51,6 +51,7 @@ public:
 
     // Сервисные вспомогательные методы ответов экранной стороны.
     bool sendHello(const DeviceInfo& deviceInfo);
+    bool sendDeviceInfo(const DeviceInfo& deviceInfo);
     bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
     bool sendPageState(const PageState& pageState);
     bool sendElementState(const ElementState& elementState);

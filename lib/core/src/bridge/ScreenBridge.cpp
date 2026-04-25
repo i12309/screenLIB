@@ -110,9 +110,10 @@ size_t ScreenBridge::processIncoming() {
     return processed;
 }
 
-bool ScreenBridge::showPage(uint32_t pageId) {
+bool ScreenBridge::showPage(uint32_t pageId, uint32_t sessionId) {
     Envelope& env = prepareTxEnvelope(Envelope_show_page_tag);
     env.payload.show_page.page_id = pageId;
+    env.payload.show_page.session_id = sessionId;
     return sendEnvelope(env);
 }
 

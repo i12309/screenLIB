@@ -41,6 +41,7 @@ constexpr RequestId kInvalidRequestId = 0;
 class PageRuntime {
 public:
     using LinkListener = void (*)(bool up, void* user);
+    using DeviceInfoListener = void (*)(const DeviceInfo& info, void* user);
     using PageFactory  = std::unique_ptr<IPage> (*)();
 
     // --- Тайминги/лимиты ---
@@ -93,6 +94,11 @@ public:
         _linkListenerUser = user;
     }
 
+    void setDeviceInfoListener(DeviceInfoListener l, void* user) {
+        _deviceInfoListener = l;
+        _deviceInfoListenerUser = user;
+    }
+
     // --- Для тестов: инжекция источника времени ---
 
     // По умолчанию — Arduino millis() на ARDUINO-сборках и
@@ -132,9 +138,9 @@ private:
     static void onBridgeEnvelope(const Envelope& env, void* userData);
     void onEnvelope(const Envelope& env);
 
-    // Отправка Envelope по mirrorMode. Возвращает true, если хотя бы один
-    // bridge принял сообщение.
-    bool sendEnvelopeByMode(const Envelope& env);
+    bool sendShowPageByMode(uint32_t pageId, uint32_t sessionId);
+    bool sendSetElementAttributeByMode(const SetElementAttribute& cmd);
+    void notifyDeviceInfo(const DeviceInfo& info);
 
     // Проверка таймаута на голове очереди. Вызывается из tick.
     void checkPendingTimeouts();
@@ -163,6 +169,8 @@ private:
     bool _linkUp = true;
     LinkListener _linkListener = nullptr;
     void* _linkListenerUser = nullptr;
+    DeviceInfoListener _deviceInfoListener = nullptr;
+    void* _deviceInfoListenerUser = nullptr;
 
     struct Pending {
         RequestId id = kInvalidRequestId;
