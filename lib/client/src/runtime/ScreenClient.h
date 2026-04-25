@@ -47,6 +47,7 @@ public:
                          ButtonAction action = ButtonAction_CLICK);
     bool sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value);
     bool sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text);
+    bool sendEnvelope(const Envelope& env);
 
     // Сервисные вспомогательные методы ответов экранной стороны.
     bool sendHello(const DeviceInfo& deviceInfo);

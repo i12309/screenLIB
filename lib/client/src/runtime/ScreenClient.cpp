@@ -106,6 +106,10 @@ bool ScreenClient::sendInputEventString(uint32_t elementId, uint32_t pageId, con
     return sendOutgoingEnvelope(env);
 }
 
+bool ScreenClient::sendEnvelope(const Envelope& env) {
+    return sendOutgoingEnvelope(env);
+}
+
 bool ScreenClient::sendHello(const DeviceInfo& deviceInfo) {
     return _bridge.sendHello(deviceInfo);
 }
