@@ -122,14 +122,6 @@ bool ScreenClient::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
     return _bridge.sendCurrentPage(pageId, requestId);
 }
 
-bool ScreenClient::sendPageState(const PageState& pageState) {
-    return _bridge.sendPageState(pageState);
-}
-
-bool ScreenClient::sendElementState(const ElementState& elementState) {
-    return _bridge.sendElementState(elementState);
-}
-
 // Ответ на request_element_attribute (screen -> host).
 bool ScreenClient::sendElementAttributeState(const ElementAttributeState& state) {
     return _bridge.sendElementAttributeState(state);

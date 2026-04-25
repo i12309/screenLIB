@@ -8,7 +8,6 @@ syntax = "proto3";
 //   Экран → Контроллер : user events + service response
 //
 // Один Envelope = одна команда.
-// Для пакетного обновления нескольких элементов — SetBatch.
 //
 // Архитектурно:
 // - динамическое состояние UI синхронизируется push-командами с backend;
@@ -19,15 +18,15 @@ syntax = "proto3";
 message Envelope {
   // Исторически использованные, но удалённые теги в oneof payload.
   // Не переиспользовать во избежание конфликта с клиентами старых версий.
+  reserved 2, 3, 4, 5, 6;
+  reserved 15, 16, 17, 18;
   reserved 20;
-  reserved "set_element_attribute_batch";
+  reserved "set_text", "set_color", "set_visible", "set_value", "set_batch",
+           "request_page_state", "page_state",
+           "request_element_state", "element_state",
+           "set_element_attribute_batch";
   oneof payload {
     ShowPage    show_page    = 1;  // показать страницу
-    SetText     set_text     = 2;  // текст элемента
-    SetColor    set_color    = 3;  // цвет фона и текста
-    SetVisible  set_visible  = 4;  // видимость элемента
-    SetValue    set_value    = 5;  // числовое значение (прогресс, чекбокс)
-    SetBatch    set_batch    = 6;  // пакетное обновление нескольких полей
     ButtonEvent button_event = 7;  // нажатие кнопки (экран → контроллер)
     InputEvent  input_event  = 8;  // ввод значения пользователем
     Heartbeat   heartbeat    = 9;  // watchdog / детекция разрыва
@@ -38,10 +37,6 @@ message Envelope {
     DeviceInfo          device_info          = 12; // screen -> backend (response или async info)
     RequestCurrentPage  request_current_page = 13; // backend -> screen
     CurrentPage         current_page         = 14; // screen -> backend
-    RequestPageState    request_page_state   = 15; // backend -> screen
-    PageState           page_state           = 16; // screen -> backend
-    RequestElementState request_element_state= 17; // backend -> screen
-    ElementState        element_state        = 18; // screen -> backend
     SetElementAttribute      set_element_attribute       = 19; // точечная запись style/layout атрибута
     // reserved: tag 20 (set_element_attribute_batch) — удалён, не переиспользовать.
     RequestElementAttribute  request_element_attribute   = 21; // backend -> screen
@@ -63,39 +58,10 @@ message ShowPage {
   uint32 session_id = 2;
 }
 
-// Установить текст элемента
-message SetText {
-  uint32 element_id = 1;
-  string text       = 2;  // макс. 64 символа (см. machine.options)
-}
 
-// Установить цвет элемента (RGB565, как в Nextion/LVGL)
-message SetColor {
-  uint32 element_id = 1;
-  uint32 bg_color   = 2;  // цвет фона
-  uint32 fg_color   = 3;  // цвет текста/иконки
-}
 
-// Показать или скрыть элемент
-message SetVisible {
-  uint32 element_id = 1;
-  bool   visible    = 2;
-}
 
-// Числовое значение (прогресс-бар, чекбокс, слайдер и т.д.)
-message SetValue {
-  uint32 element_id = 1;
-  int32  value      = 2;
-}
 
-// Пакетное обновление — несколько операций за один кадр.
-// Удобно когда нужно атомарно обновить целую страницу.
-message SetBatch {
-  repeated SetText    texts    = 1;
-  repeated SetColor   colors   = 2;
-  repeated SetVisible visibles = 3;
-  repeated SetValue   values   = 4;
-}
 
 // ---- Typed element attributes ----
 
@@ -234,33 +200,8 @@ message Heartbeat {
 
 // ---- Service layer: metadata / request-response ----
 
-// Тип динамического состояния элемента в snapshot-ответах.
-enum ElementStateType {
-  ELEMENT_STATE_UNKNOWN = 0;
-  ELEMENT_STATE_TEXT    = 1;
-  ELEMENT_STATE_INT     = 2;
-  ELEMENT_STATE_VISIBLE = 3;
-  ELEMENT_STATE_COLOR   = 4;
-}
 
-// Цветовое состояние элемента.
-message ColorState {
-  uint32 bg_color = 1;
-  uint32 fg_color = 2;
-}
 
-// Состояние одного динамического элемента.
-// Для компактности один элемент несет одно актуальное значение (oneof value).
-message PageElementState {
-  uint32 element_id = 1;
-  ElementStateType type = 2;
-  oneof value {
-    string text_value = 3;
-    int32  int_value  = 4;
-    bool   visible    = 5;
-    ColorState color  = 6;
-  }
-}
 
 // Идентификация и capability screen client.
 message DeviceInfo {
@@ -292,30 +233,9 @@ message CurrentPage {
   uint32 page_id    = 2;
 }
 
-message RequestPageState {
-  uint32 request_id = 1;
-  uint32 page_id    = 2;
-}
 
-// Snapshot динамического состояния конкретной страницы.
-message PageState {
-  uint32 request_id = 1;
-  uint32 page_id    = 2;
-  repeated PageElementState elements = 3;
-}
 
-message RequestElementState {
-  uint32 request_id = 1;
-  uint32 page_id    = 2;
-  uint32 element_id = 3;
-}
 
-message ElementState {
-  uint32 request_id = 1;
-  uint32 page_id    = 2;
-  bool found        = 3;
-  PageElementState element = 4;
-}
 
 // Запрос одного точечного атрибута элемента.
 message RequestElementAttribute {

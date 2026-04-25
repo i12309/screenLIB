@@ -53,8 +53,6 @@ public:
     bool sendHello(const DeviceInfo& deviceInfo);
     bool sendDeviceInfo(const DeviceInfo& deviceInfo);
     bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
-    bool sendPageState(const PageState& pageState);
-    bool sendElementState(const ElementState& elementState);
     // Ответ на request_element_attribute.
     bool sendElementAttributeState(const ElementAttributeState& state);
 

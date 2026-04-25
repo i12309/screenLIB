@@ -115,16 +115,14 @@ void test_screen_bridge_service_helpers_encode_envelopes() {
 
     TEST_ASSERT_TRUE(bridge.requestDeviceInfo(101));
     TEST_ASSERT_TRUE(bridge.requestCurrentPage(102));
-    TEST_ASSERT_TRUE(bridge.requestPageState(7, 103));
-    TEST_ASSERT_TRUE(bridge.requestElementState(88, 7, 104));
 
     CurrentPage currentPage = CurrentPage_init_zero;
-    currentPage.request_id = 105;
+    currentPage.request_id = 103;
     currentPage.page_id = 9;
     TEST_ASSERT_TRUE(bridge.sendCurrentPage(currentPage.page_id, currentPage.request_id));
 
     std::vector<Envelope> out;
-    TEST_ASSERT_EQUAL_UINT32(5u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(3u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 
     TEST_ASSERT_EQUAL_UINT32(Envelope_request_device_info_tag, out[0].which_payload);
     TEST_ASSERT_EQUAL_UINT32(101, out[0].payload.request_device_info.request_id);
@@ -132,18 +130,9 @@ void test_screen_bridge_service_helpers_encode_envelopes() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_request_current_page_tag, out[1].which_payload);
     TEST_ASSERT_EQUAL_UINT32(102, out[1].payload.request_current_page.request_id);
 
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_page_state_tag, out[2].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(103, out[2].payload.request_page_state.request_id);
-    TEST_ASSERT_EQUAL_UINT32(7, out[2].payload.request_page_state.page_id);
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_state_tag, out[3].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(104, out[3].payload.request_element_state.request_id);
-    TEST_ASSERT_EQUAL_UINT32(7, out[3].payload.request_element_state.page_id);
-    TEST_ASSERT_EQUAL_UINT32(88, out[3].payload.request_element_state.element_id);
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_current_page_tag, out[4].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(105, out[4].payload.current_page.request_id);
-    TEST_ASSERT_EQUAL_UINT32(9, out[4].payload.current_page.page_id);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_current_page_tag, out[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(103, out[2].payload.current_page.request_id);
+    TEST_ASSERT_EQUAL_UINT32(9, out[2].payload.current_page.page_id);
 }
 
 void test_screen_bridge_attribute_helpers_encode_envelopes() {

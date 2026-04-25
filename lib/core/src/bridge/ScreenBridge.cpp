@@ -11,11 +11,6 @@ constexpr const char* kBridgeLogTag = "screenlib.bridge";
 const char* screenlib_payload_name(pb_size_t tag) {
     switch (tag) {
         case Envelope_show_page_tag: return "show_page";
-        case Envelope_set_text_tag: return "set_text";
-        case Envelope_set_color_tag: return "set_color";
-        case Envelope_set_visible_tag: return "set_visible";
-        case Envelope_set_value_tag: return "set_value";
-        case Envelope_set_batch_tag: return "set_batch";
         case Envelope_button_event_tag: return "button_event";
         case Envelope_input_event_tag: return "input_event";
         case Envelope_heartbeat_tag: return "heartbeat";
@@ -24,10 +19,6 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_device_info_tag: return "device_info";
         case Envelope_request_current_page_tag: return "request_current_page";
         case Envelope_current_page_tag: return "current_page";
-        case Envelope_request_page_state_tag: return "request_page_state";
-        case Envelope_page_state_tag: return "page_state";
-        case Envelope_request_element_state_tag: return "request_element_state";
-        case Envelope_element_state_tag: return "element_state";
         case Envelope_set_element_attribute_tag: return "set_element_attribute";
         case Envelope_request_element_attribute_tag: return "request_element_attribute";
         case Envelope_element_attribute_state_tag: return "element_attribute_state";
@@ -117,35 +108,6 @@ bool ScreenBridge::showPage(uint32_t pageId, uint32_t sessionId) {
     return sendEnvelope(env);
 }
 
-bool ScreenBridge::setText(uint32_t elementId, const char* text) {
-    Envelope& env = prepareTxEnvelope(Envelope_set_text_tag);
-    env.payload.set_text.element_id = elementId;
-    copyTextSafe(env.payload.set_text.text, sizeof(env.payload.set_text.text), text);
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::setValue(uint32_t elementId, int32_t value) {
-    Envelope& env = prepareTxEnvelope(Envelope_set_value_tag);
-    env.payload.set_value.element_id = elementId;
-    env.payload.set_value.value = value;
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::setVisible(uint32_t elementId, bool visible) {
-    Envelope& env = prepareTxEnvelope(Envelope_set_visible_tag);
-    env.payload.set_visible.element_id = elementId;
-    env.payload.set_visible.visible = visible;
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) {
-    Envelope& env = prepareTxEnvelope(Envelope_set_color_tag);
-    env.payload.set_color.element_id = elementId;
-    env.payload.set_color.bg_color = bgColor;
-    env.payload.set_color.fg_color = fgColor;
-    return sendEnvelope(env);
-}
-
 bool ScreenBridge::sendHeartbeat(uint32_t uptimeMs) {
     Envelope& env = prepareTxEnvelope(Envelope_heartbeat_tag);
     env.payload.heartbeat.uptime_ms = uptimeMs;
@@ -177,20 +139,6 @@ bool ScreenBridge::requestElementAttribute(uint32_t elementId,
     return sendEnvelope(env);
 }
 
-bool ScreenBridge::sendBatch(const SetBatch& batch) {
-    SetBatch safeBatch{};
-    sanitizeBatch(batch, safeBatch);
-
-    Envelope& env = prepareTxEnvelope(Envelope_set_batch_tag);
-    env.payload.set_batch = safeBatch;
-
-    if (sendEnvelope(env)) {
-        return true;
-    }
-
-    return sendBatchSplit(safeBatch);
-}
-
 bool ScreenBridge::sendHello(const DeviceInfo& deviceInfo) {
     Envelope& env = prepareTxEnvelope(Envelope_hello_tag);
     env.payload.hello.has_device_info = true;
@@ -210,21 +158,6 @@ bool ScreenBridge::requestCurrentPage(uint32_t requestId) {
     return sendEnvelope(env);
 }
 
-bool ScreenBridge::requestPageState(uint32_t pageId, uint32_t requestId) {
-    Envelope& env = prepareTxEnvelope(Envelope_request_page_state_tag);
-    env.payload.request_page_state.request_id = requestId;
-    env.payload.request_page_state.page_id = pageId;
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::requestElementState(uint32_t elementId, uint32_t pageId, uint32_t requestId) {
-    Envelope& env = prepareTxEnvelope(Envelope_request_element_state_tag);
-    env.payload.request_element_state.request_id = requestId;
-    env.payload.request_element_state.page_id = pageId;
-    env.payload.request_element_state.element_id = elementId;
-    return sendEnvelope(env);
-}
-
 bool ScreenBridge::sendDeviceInfo(const DeviceInfo& deviceInfo) {
     Envelope& env = prepareTxEnvelope(Envelope_device_info_tag);
     env.payload.device_info = deviceInfo;
@@ -235,18 +168,6 @@ bool ScreenBridge::sendCurrentPage(uint32_t pageId, uint32_t requestId) {
     Envelope& env = prepareTxEnvelope(Envelope_current_page_tag);
     env.payload.current_page.request_id = requestId;
     env.payload.current_page.page_id = pageId;
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::sendPageState(const PageState& pageState) {
-    Envelope& env = prepareTxEnvelope(Envelope_page_state_tag);
-    env.payload.page_state = pageState;
-    return sendEnvelope(env);
-}
-
-bool ScreenBridge::sendElementState(const ElementState& elementState) {
-    Envelope& env = prepareTxEnvelope(Envelope_element_state_tag);
-    env.payload.element_state = elementState;
     return sendEnvelope(env);
 }
 
@@ -287,77 +208,6 @@ void ScreenBridge::dispatchEnvelope(const Envelope& env) const {
     }
 }
 
-void ScreenBridge::copyTextSafe(char* dst, size_t dstSize, const char* src) {
-    if (dst == nullptr || dstSize == 0) {
-        return;
-    }
-
-    dst[0] = '\0';
-    if (src == nullptr) {
-        return;
-    }
-
-    strncpy(dst, src, dstSize - 1);
-    dst[dstSize - 1] = '\0';
-}
-
-uint8_t ScreenBridge::clampBatchCount(uint8_t value) {
-    return value > kMaxBatchCount ? kMaxBatchCount : value;
-}
-
-void ScreenBridge::sanitizeBatch(const SetBatch& src, SetBatch& dst) {
-    dst = SetBatch{};
-
-    dst.texts_count = clampBatchCount(src.texts_count);
-    for (uint8_t i = 0; i < dst.texts_count; i++) {
-        dst.texts[i].element_id = src.texts[i].element_id;
-        copyTextSafe(dst.texts[i].text, sizeof(dst.texts[i].text), src.texts[i].text);
-    }
-
-    dst.colors_count = clampBatchCount(src.colors_count);
-    for (uint8_t i = 0; i < dst.colors_count; i++) {
-        dst.colors[i] = src.colors[i];
-    }
-
-    dst.visibles_count = clampBatchCount(src.visibles_count);
-    for (uint8_t i = 0; i < dst.visibles_count; i++) {
-        dst.visibles[i] = src.visibles[i];
-    }
-
-    dst.values_count = clampBatchCount(src.values_count);
-    for (uint8_t i = 0; i < dst.values_count; i++) {
-        dst.values[i] = src.values[i];
-    }
-}
-
-bool ScreenBridge::sendBatchSplit(const SetBatch& batch) {
-    for (uint8_t i = 0; i < batch.texts_count; i++) {
-        if (!setText(batch.texts[i].element_id, batch.texts[i].text)) {
-            return false;
-        }
-    }
-
-    for (uint8_t i = 0; i < batch.colors_count; i++) {
-        if (!setColor(batch.colors[i].element_id, batch.colors[i].bg_color, batch.colors[i].fg_color)) {
-            return false;
-        }
-    }
-
-    for (uint8_t i = 0; i < batch.visibles_count; i++) {
-        if (!setVisible(batch.visibles[i].element_id, batch.visibles[i].visible)) {
-            return false;
-        }
-    }
-
-    for (uint8_t i = 0; i < batch.values_count; i++) {
-        if (!setValue(batch.values[i].element_id, batch.values[i].value)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst) {
     dst = SetElementAttribute_init_zero;
     dst.element_id = src.element_id;
@@ -372,6 +222,9 @@ bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetE
         case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH:
         case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT:
         case ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_VALUE:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_X:
+        case ElementAttribute_ELEMENT_ATTRIBUTE_Y:
             if (src.which_value != SetElementAttribute_int_value_tag) {
                 return false;
             }
@@ -400,6 +253,25 @@ bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetE
             }
             dst.which_value = SetElementAttribute_font_value_tag;
             dst.value.font_value = src.value.font_value;
+            return true;
+
+        case ElementAttribute_ELEMENT_ATTRIBUTE_VISIBLE:
+            if (src.which_value != SetElementAttribute_bool_value_tag) {
+                return false;
+            }
+            dst.which_value = SetElementAttribute_bool_value_tag;
+            dst.value.bool_value = src.value.bool_value;
+            return true;
+
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT:
+            if (src.which_value != SetElementAttribute_string_value_tag) {
+                return false;
+            }
+            dst.which_value = SetElementAttribute_string_value_tag;
+            strncpy(dst.value.string_value,
+                    src.value.string_value,
+                    sizeof(dst.value.string_value) - 1);
+            dst.value.string_value[sizeof(dst.value.string_value) - 1] = '\0';
             return true;
 
         case ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN:

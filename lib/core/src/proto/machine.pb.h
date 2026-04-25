@@ -53,15 +53,6 @@ typedef enum _ButtonAction {
     ButtonAction_REPEAT = 3
 } ButtonAction;
 
-/* Тип динамического состояния элемента в snapshot-ответах. */
-typedef enum _ElementStateType {
-    ElementStateType_ELEMENT_STATE_UNKNOWN = 0,
-    ElementStateType_ELEMENT_STATE_TEXT = 1,
-    ElementStateType_ELEMENT_STATE_INT = 2,
-    ElementStateType_ELEMENT_STATE_VISIBLE = 3,
-    ElementStateType_ELEMENT_STATE_COLOR = 4
-} ElementStateType;
-
 /* Struct definitions */
 /* Показать страницу по ID.
  session_id — эпоха навигации, инкрементируется бэком при каждом переходе.
@@ -72,44 +63,6 @@ typedef struct _ShowPage {
     uint32_t page_id;
     uint32_t session_id;
 } ShowPage;
-
-/* Установить текст элемента */
-typedef struct _SetText {
-    uint32_t element_id;
-    char text[32]; /* макс. 64 символа (см. machine.options) */
-} SetText;
-
-/* Установить цвет элемента (RGB565, как в Nextion/LVGL) */
-typedef struct _SetColor {
-    uint32_t element_id;
-    uint32_t bg_color; /* цвет фона */
-    uint32_t fg_color; /* цвет текста/иконки */
-} SetColor;
-
-/* Показать или скрыть элемент */
-typedef struct _SetVisible {
-    uint32_t element_id;
-    bool visible;
-} SetVisible;
-
-/* Числовое значение (прогресс-бар, чекбокс, слайдер и т.д.) */
-typedef struct _SetValue {
-    uint32_t element_id;
-    int32_t value;
-} SetValue;
-
-/* Пакетное обновление — несколько операций за один кадр.
- Удобно когда нужно атомарно обновить целую страницу. */
-typedef struct _SetBatch {
-    pb_size_t texts_count;
-    SetText texts[8];
-    pb_size_t colors_count;
-    SetColor colors[8];
-    pb_size_t visibles_count;
-    SetVisible visibles[8];
-    pb_size_t values_count;
-    SetValue values[8];
-} SetBatch;
 
 /* Точечная запись одного атрибута элемента.
  request_id — для ACK-сопоставления: экран в ответ пришлёт
@@ -205,26 +158,6 @@ typedef struct _Heartbeat {
     uint32_t uptime_ms; /* время работы отправителя в мс */
 } Heartbeat;
 
-/* Цветовое состояние элемента. */
-typedef struct _ColorState {
-    uint32_t bg_color;
-    uint32_t fg_color;
-} ColorState;
-
-/* Состояние одного динамического элемента.
- Для компактности один элемент несет одно актуальное значение (oneof value). */
-typedef struct _PageElementState {
-    uint32_t element_id;
-    ElementStateType type;
-    pb_size_t which_value;
-    union {
-        char text_value[32];
-        int32_t int_value;
-        bool visible;
-        ColorState color;
-    } value;
-} PageElementState;
-
 /* Идентификация и capability screen client. */
 typedef struct _DeviceInfo {
     uint32_t protocol_version;
@@ -256,33 +189,6 @@ typedef struct _CurrentPage {
     uint32_t page_id;
 } CurrentPage;
 
-typedef struct _RequestPageState {
-    uint32_t request_id;
-    uint32_t page_id;
-} RequestPageState;
-
-/* Snapshot динамического состояния конкретной страницы. */
-typedef struct _PageState {
-    uint32_t request_id;
-    uint32_t page_id;
-    pb_size_t elements_count;
-    PageElementState elements[8];
-} PageState;
-
-typedef struct _RequestElementState {
-    uint32_t request_id;
-    uint32_t page_id;
-    uint32_t element_id;
-} RequestElementState;
-
-typedef struct _ElementState {
-    uint32_t request_id;
-    uint32_t page_id;
-    bool found;
-    bool has_element;
-    PageElementState element;
-} ElementState;
-
 /* Запрос одного точечного атрибута элемента. */
 typedef struct _RequestElementAttribute {
     uint32_t request_id;
@@ -311,11 +217,6 @@ typedef struct _Envelope {
     pb_size_t which_payload;
     union {
         ShowPage show_page; /* показать страницу */
-        SetText set_text; /* текст элемента */
-        SetColor set_color; /* цвет фона и текста */
-        SetVisible set_visible; /* видимость элемента */
-        SetValue set_value; /* числовое значение (прогресс, чекбокс) */
-        SetBatch set_batch; /* пакетное обновление нескольких полей */
         ButtonEvent button_event; /* нажатие кнопки (экран → контроллер) */
         InputEvent input_event; /* ввод значения пользователем */
         Heartbeat heartbeat; /* watchdog / детекция разрыва */
@@ -325,10 +226,6 @@ typedef struct _Envelope {
         DeviceInfo device_info; /* screen -> backend (response или async info) */
         RequestCurrentPage request_current_page; /* backend -> screen */
         CurrentPage current_page; /* screen -> backend */
-        RequestPageState request_page_state; /* backend -> screen */
-        PageState page_state; /* screen -> backend */
-        RequestElementState request_element_state; /* backend -> screen */
-        ElementState element_state; /* screen -> backend */
         SetElementAttribute set_element_attribute; /* точечная запись style/layout атрибута */
         /* reserved: tag 20 (set_element_attribute_batch) — удалён, не переиспользовать. */
         RequestElementAttribute request_element_attribute; /* backend -> screen */
@@ -360,15 +257,6 @@ extern "C" {
 #define _ButtonAction_MAX ButtonAction_REPEAT
 #define _ButtonAction_ARRAYSIZE ((ButtonAction)(ButtonAction_REPEAT+1))
 
-#define _ElementStateType_MIN ElementStateType_ELEMENT_STATE_UNKNOWN
-#define _ElementStateType_MAX ElementStateType_ELEMENT_STATE_COLOR
-#define _ElementStateType_ARRAYSIZE ((ElementStateType)(ElementStateType_ELEMENT_STATE_COLOR+1))
-
-
-
-
-
-
 
 
 #define SetElementAttribute_attribute_ENUMTYPE ElementAttribute
@@ -386,13 +274,6 @@ extern "C" {
 
 
 
-#define PageElementState_type_ENUMTYPE ElementStateType
-
-
-
-
-
-
 
 
 
@@ -406,11 +287,6 @@ extern "C" {
 /* Initializer values for message structs */
 #define Envelope_init_default                    {0, {ShowPage_init_default}}
 #define ShowPage_init_default                    {0, 0}
-#define SetText_init_default                     {0, ""}
-#define SetColor_init_default                    {0, 0, 0}
-#define SetVisible_init_default                  {0, 0}
-#define SetValue_init_default                    {0, 0}
-#define SetBatch_init_default                    {0, {SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default, SetText_init_default}, 0, {SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default, SetColor_init_default}, 0, {SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default, SetVisible_init_default}, 0, {SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default, SetValue_init_default}}
 #define SetElementAttribute_init_default         {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
 #define ElementAttributeValue_init_default       {_ElementAttribute_MIN, 0, {0}}
 #define ElementSnapshot_init_default             {0, 0, {ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default}}
@@ -419,26 +295,15 @@ extern "C" {
 #define ButtonEvent_init_default                 {0, 0, _ButtonAction_MIN, 0}
 #define InputEvent_init_default                  {0, 0, 0, {0}, 0}
 #define Heartbeat_init_default                   {0}
-#define ColorState_init_default                  {0, 0}
-#define PageElementState_init_default            {0, _ElementStateType_MIN, 0, {""}}
 #define DeviceInfo_init_default                  {0, "", "", "", "", "", "", 0}
 #define Hello_init_default                       {false, DeviceInfo_init_default}
 #define RequestDeviceInfo_init_default           {0}
 #define RequestCurrentPage_init_default          {0}
 #define CurrentPage_init_default                 {0, 0}
-#define RequestPageState_init_default            {0, 0}
-#define PageState_init_default                   {0, 0, 0, {PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default, PageElementState_init_default}}
-#define RequestElementState_init_default         {0, 0, 0}
-#define ElementState_init_default                {0, 0, 0, false, PageElementState_init_default}
 #define RequestElementAttribute_init_default     {0, 0, 0, _ElementAttribute_MIN}
 #define ElementAttributeState_init_default       {0, 0, 0, _ElementAttribute_MIN, 0, 0, {0}}
 #define Envelope_init_zero                       {0, {ShowPage_init_zero}}
 #define ShowPage_init_zero                       {0, 0}
-#define SetText_init_zero                        {0, ""}
-#define SetColor_init_zero                       {0, 0, 0}
-#define SetVisible_init_zero                     {0, 0}
-#define SetValue_init_zero                       {0, 0}
-#define SetBatch_init_zero                       {0, {SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero, SetText_init_zero}, 0, {SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero, SetColor_init_zero}, 0, {SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero, SetVisible_init_zero}, 0, {SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero, SetValue_init_zero}}
 #define SetElementAttribute_init_zero            {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
 #define ElementAttributeValue_init_zero          {_ElementAttribute_MIN, 0, {0}}
 #define ElementSnapshot_init_zero                {0, 0, {ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero}}
@@ -447,36 +312,17 @@ extern "C" {
 #define ButtonEvent_init_zero                    {0, 0, _ButtonAction_MIN, 0}
 #define InputEvent_init_zero                     {0, 0, 0, {0}, 0}
 #define Heartbeat_init_zero                      {0}
-#define ColorState_init_zero                     {0, 0}
-#define PageElementState_init_zero               {0, _ElementStateType_MIN, 0, {""}}
 #define DeviceInfo_init_zero                     {0, "", "", "", "", "", "", 0}
 #define Hello_init_zero                          {false, DeviceInfo_init_zero}
 #define RequestDeviceInfo_init_zero              {0}
 #define RequestCurrentPage_init_zero             {0}
 #define CurrentPage_init_zero                    {0, 0}
-#define RequestPageState_init_zero               {0, 0}
-#define PageState_init_zero                      {0, 0, 0, {PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero, PageElementState_init_zero}}
-#define RequestElementState_init_zero            {0, 0, 0}
-#define ElementState_init_zero                   {0, 0, 0, false, PageElementState_init_zero}
 #define RequestElementAttribute_init_zero        {0, 0, 0, _ElementAttribute_MIN}
 #define ElementAttributeState_init_zero          {0, 0, 0, _ElementAttribute_MIN, 0, 0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define ShowPage_page_id_tag                     1
 #define ShowPage_session_id_tag                  2
-#define SetText_element_id_tag                   1
-#define SetText_text_tag                         2
-#define SetColor_element_id_tag                  1
-#define SetColor_bg_color_tag                    2
-#define SetColor_fg_color_tag                    3
-#define SetVisible_element_id_tag                1
-#define SetVisible_visible_tag                   2
-#define SetValue_element_id_tag                  1
-#define SetValue_value_tag                       2
-#define SetBatch_texts_tag                       1
-#define SetBatch_colors_tag                      2
-#define SetBatch_visibles_tag                    3
-#define SetBatch_values_tag                      4
 #define SetElementAttribute_element_id_tag       1
 #define SetElementAttribute_attribute_tag        2
 #define SetElementAttribute_int_value_tag        3
@@ -513,14 +359,6 @@ extern "C" {
 #define InputEvent_string_value_tag              4
 #define InputEvent_session_id_tag                5
 #define Heartbeat_uptime_ms_tag                  1
-#define ColorState_bg_color_tag                  1
-#define ColorState_fg_color_tag                  2
-#define PageElementState_element_id_tag          1
-#define PageElementState_type_tag                2
-#define PageElementState_text_value_tag          3
-#define PageElementState_int_value_tag           4
-#define PageElementState_visible_tag             5
-#define PageElementState_color_tag               6
 #define DeviceInfo_protocol_version_tag          1
 #define DeviceInfo_fw_version_tag                2
 #define DeviceInfo_ui_version_tag                3
@@ -534,18 +372,6 @@ extern "C" {
 #define RequestCurrentPage_request_id_tag        1
 #define CurrentPage_request_id_tag               1
 #define CurrentPage_page_id_tag                  2
-#define RequestPageState_request_id_tag          1
-#define RequestPageState_page_id_tag             2
-#define PageState_request_id_tag                 1
-#define PageState_page_id_tag                    2
-#define PageState_elements_tag                   3
-#define RequestElementState_request_id_tag       1
-#define RequestElementState_page_id_tag          2
-#define RequestElementState_element_id_tag       3
-#define ElementState_request_id_tag              1
-#define ElementState_page_id_tag                 2
-#define ElementState_found_tag                   3
-#define ElementState_element_tag                 4
 #define RequestElementAttribute_request_id_tag   1
 #define RequestElementAttribute_page_id_tag      2
 #define RequestElementAttribute_element_id_tag   3
@@ -559,11 +385,6 @@ extern "C" {
 #define ElementAttributeState_color_value_tag    7
 #define ElementAttributeState_font_value_tag     8
 #define Envelope_show_page_tag                   1
-#define Envelope_set_text_tag                    2
-#define Envelope_set_color_tag                   3
-#define Envelope_set_visible_tag                 4
-#define Envelope_set_value_tag                   5
-#define Envelope_set_batch_tag                   6
 #define Envelope_button_event_tag                7
 #define Envelope_input_event_tag                 8
 #define Envelope_heartbeat_tag                   9
@@ -572,10 +393,6 @@ extern "C" {
 #define Envelope_device_info_tag                 12
 #define Envelope_request_current_page_tag        13
 #define Envelope_current_page_tag                14
-#define Envelope_request_page_state_tag          15
-#define Envelope_page_state_tag                  16
-#define Envelope_request_element_state_tag       17
-#define Envelope_element_state_tag               18
 #define Envelope_set_element_attribute_tag       19
 #define Envelope_request_element_attribute_tag   21
 #define Envelope_element_attribute_state_tag     22
@@ -585,11 +402,6 @@ extern "C" {
 /* Struct field encoding specification for nanopb */
 #define Envelope_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,show_page,payload.show_page),   1) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_text,payload.set_text),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_color,payload.set_color),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_visible,payload.set_visible),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_value,payload.set_value),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_batch,payload.set_batch),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,button_event,payload.button_event),   7) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,input_event,payload.input_event),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,heartbeat,payload.heartbeat),   9) \
@@ -598,10 +410,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_device_info,payload.request_
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,device_info,payload.device_info),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_current_page,payload.request_current_page),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,current_page,payload.current_page),  14) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_page_state,payload.request_page_state),  15) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_state,payload.page_state),  16) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_element_state,payload.request_element_state),  17) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,element_state,payload.element_state),  18) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_element_attribute,payload.set_element_attribute),  19) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_element_attribute,payload.request_element_attribute),  21) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,element_attribute_state,payload.element_attribute_state),  22) \
@@ -610,11 +418,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_
 #define Envelope_CALLBACK NULL
 #define Envelope_DEFAULT NULL
 #define Envelope_payload_show_page_MSGTYPE ShowPage
-#define Envelope_payload_set_text_MSGTYPE SetText
-#define Envelope_payload_set_color_MSGTYPE SetColor
-#define Envelope_payload_set_visible_MSGTYPE SetVisible
-#define Envelope_payload_set_value_MSGTYPE SetValue
-#define Envelope_payload_set_batch_MSGTYPE SetBatch
 #define Envelope_payload_button_event_MSGTYPE ButtonEvent
 #define Envelope_payload_input_event_MSGTYPE InputEvent
 #define Envelope_payload_heartbeat_MSGTYPE Heartbeat
@@ -623,10 +426,6 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_
 #define Envelope_payload_device_info_MSGTYPE DeviceInfo
 #define Envelope_payload_request_current_page_MSGTYPE RequestCurrentPage
 #define Envelope_payload_current_page_MSGTYPE CurrentPage
-#define Envelope_payload_request_page_state_MSGTYPE RequestPageState
-#define Envelope_payload_page_state_MSGTYPE PageState
-#define Envelope_payload_request_element_state_MSGTYPE RequestElementState
-#define Envelope_payload_element_state_MSGTYPE ElementState
 #define Envelope_payload_set_element_attribute_MSGTYPE SetElementAttribute
 #define Envelope_payload_request_element_attribute_MSGTYPE RequestElementAttribute
 #define Envelope_payload_element_attribute_state_MSGTYPE ElementAttributeState
@@ -638,43 +437,6 @@ X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        2)
 #define ShowPage_CALLBACK NULL
 #define ShowPage_DEFAULT NULL
-
-#define SetText_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, STRING,   text,              2)
-#define SetText_CALLBACK NULL
-#define SetText_DEFAULT NULL
-
-#define SetColor_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   bg_color,          2) \
-X(a, STATIC,   SINGULAR, UINT32,   fg_color,          3)
-#define SetColor_CALLBACK NULL
-#define SetColor_DEFAULT NULL
-
-#define SetVisible_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, BOOL,     visible,           2)
-#define SetVisible_CALLBACK NULL
-#define SetVisible_DEFAULT NULL
-
-#define SetValue_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, INT32,    value,             2)
-#define SetValue_CALLBACK NULL
-#define SetValue_DEFAULT NULL
-
-#define SetBatch_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, MESSAGE,  texts,             1) \
-X(a, STATIC,   REPEATED, MESSAGE,  colors,            2) \
-X(a, STATIC,   REPEATED, MESSAGE,  visibles,          3) \
-X(a, STATIC,   REPEATED, MESSAGE,  values,            4)
-#define SetBatch_CALLBACK NULL
-#define SetBatch_DEFAULT NULL
-#define SetBatch_texts_MSGTYPE SetText
-#define SetBatch_colors_MSGTYPE SetColor
-#define SetBatch_visibles_MSGTYPE SetVisible
-#define SetBatch_values_MSGTYPE SetValue
 
 #define SetElementAttribute_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
@@ -747,23 +509,6 @@ X(a, STATIC,   SINGULAR, UINT32,   uptime_ms,         1)
 #define Heartbeat_CALLBACK NULL
 #define Heartbeat_DEFAULT NULL
 
-#define ColorState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   bg_color,          1) \
-X(a, STATIC,   SINGULAR, UINT32,   fg_color,          2)
-#define ColorState_CALLBACK NULL
-#define ColorState_DEFAULT NULL
-
-#define PageElementState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
-X(a, STATIC,   SINGULAR, UENUM,    type,              2) \
-X(a, STATIC,   ONEOF,    STRING,   (value,text_value,value.text_value),   3) \
-X(a, STATIC,   ONEOF,    INT32,    (value,int_value,value.int_value),   4) \
-X(a, STATIC,   ONEOF,    BOOL,     (value,visible,value.visible),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (value,color,value.color),   6)
-#define PageElementState_CALLBACK NULL
-#define PageElementState_DEFAULT NULL
-#define PageElementState_value_color_MSGTYPE ColorState
-
 #define DeviceInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   protocol_version,   1) \
 X(a, STATIC,   SINGULAR, STRING,   fw_version,        2) \
@@ -798,36 +543,6 @@ X(a, STATIC,   SINGULAR, UINT32,   page_id,           2)
 #define CurrentPage_CALLBACK NULL
 #define CurrentPage_DEFAULT NULL
 
-#define RequestPageState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   page_id,           2)
-#define RequestPageState_CALLBACK NULL
-#define RequestPageState_DEFAULT NULL
-
-#define PageState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
-X(a, STATIC,   REPEATED, MESSAGE,  elements,          3)
-#define PageState_CALLBACK NULL
-#define PageState_DEFAULT NULL
-#define PageState_elements_MSGTYPE PageElementState
-
-#define RequestElementState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
-X(a, STATIC,   SINGULAR, UINT32,   element_id,        3)
-#define RequestElementState_CALLBACK NULL
-#define RequestElementState_DEFAULT NULL
-
-#define ElementState_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
-X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
-X(a, STATIC,   SINGULAR, BOOL,     found,             3) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  element,           4)
-#define ElementState_CALLBACK NULL
-#define ElementState_DEFAULT NULL
-#define ElementState_element_MSGTYPE PageElementState
-
 #define RequestElementAttribute_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   request_id,        1) \
 X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
@@ -850,11 +565,6 @@ X(a, STATIC,   ONEOF,    UENUM,    (value,font_value,value.font_value),   8)
 
 extern const pb_msgdesc_t Envelope_msg;
 extern const pb_msgdesc_t ShowPage_msg;
-extern const pb_msgdesc_t SetText_msg;
-extern const pb_msgdesc_t SetColor_msg;
-extern const pb_msgdesc_t SetVisible_msg;
-extern const pb_msgdesc_t SetValue_msg;
-extern const pb_msgdesc_t SetBatch_msg;
 extern const pb_msgdesc_t SetElementAttribute_msg;
 extern const pb_msgdesc_t ElementAttributeValue_msg;
 extern const pb_msgdesc_t ElementSnapshot_msg;
@@ -863,28 +573,17 @@ extern const pb_msgdesc_t AttributeChanged_msg;
 extern const pb_msgdesc_t ButtonEvent_msg;
 extern const pb_msgdesc_t InputEvent_msg;
 extern const pb_msgdesc_t Heartbeat_msg;
-extern const pb_msgdesc_t ColorState_msg;
-extern const pb_msgdesc_t PageElementState_msg;
 extern const pb_msgdesc_t DeviceInfo_msg;
 extern const pb_msgdesc_t Hello_msg;
 extern const pb_msgdesc_t RequestDeviceInfo_msg;
 extern const pb_msgdesc_t RequestCurrentPage_msg;
 extern const pb_msgdesc_t CurrentPage_msg;
-extern const pb_msgdesc_t RequestPageState_msg;
-extern const pb_msgdesc_t PageState_msg;
-extern const pb_msgdesc_t RequestElementState_msg;
-extern const pb_msgdesc_t ElementState_msg;
 extern const pb_msgdesc_t RequestElementAttribute_msg;
 extern const pb_msgdesc_t ElementAttributeState_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Envelope_fields &Envelope_msg
 #define ShowPage_fields &ShowPage_msg
-#define SetText_fields &SetText_msg
-#define SetColor_fields &SetColor_msg
-#define SetVisible_fields &SetVisible_msg
-#define SetValue_fields &SetValue_msg
-#define SetBatch_fields &SetBatch_msg
 #define SetElementAttribute_fields &SetElementAttribute_msg
 #define ElementAttributeValue_fields &ElementAttributeValue_msg
 #define ElementSnapshot_fields &ElementSnapshot_msg
@@ -893,49 +592,32 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 #define ButtonEvent_fields &ButtonEvent_msg
 #define InputEvent_fields &InputEvent_msg
 #define Heartbeat_fields &Heartbeat_msg
-#define ColorState_fields &ColorState_msg
-#define PageElementState_fields &PageElementState_msg
 #define DeviceInfo_fields &DeviceInfo_msg
 #define Hello_fields &Hello_msg
 #define RequestDeviceInfo_fields &RequestDeviceInfo_msg
 #define RequestCurrentPage_fields &RequestCurrentPage_msg
 #define CurrentPage_fields &CurrentPage_msg
-#define RequestPageState_fields &RequestPageState_msg
-#define PageState_fields &PageState_msg
-#define RequestElementState_fields &RequestElementState_msg
-#define ElementState_fields &ElementState_msg
 #define RequestElementAttribute_fields &RequestElementAttribute_msg
 #define ElementAttributeState_fields &ElementAttributeState_msg
 
 /* Maximum encoded size of messages (where known) */
 #define AttributeChanged_size                    79
 #define ButtonEvent_size                         20
-#define ColorState_size                          12
 #define CurrentPage_size                         12
 #define DeviceInfo_size                          178
 #define ElementAttributeState_size               33
 #define ElementAttributeValue_size               51
 #define ElementSnapshot_size                     536
-#define ElementState_size                        57
 #define Envelope_size                            8640
 #define Heartbeat_size                           6
 #define Hello_size                               181
 #define InputEvent_size                          51
 #define MACHINE_PB_H_MAX_SIZE                    Envelope_size
-#define PageElementState_size                    41
 #define PageSnapshot_size                        8636
-#define PageState_size                           356
 #define RequestCurrentPage_size                  6
 #define RequestDeviceInfo_size                   6
 #define RequestElementAttribute_size             20
-#define RequestElementState_size                 18
-#define RequestPageState_size                    12
-#define SetBatch_size                            720
-#define SetColor_size                            18
 #define SetElementAttribute_size                 69
-#define SetText_size                             39
-#define SetValue_size                            17
-#define SetVisible_size                          8
 #define ShowPage_size                            12
 
 #ifdef __cplusplus

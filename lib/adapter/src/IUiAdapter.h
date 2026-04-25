@@ -17,13 +17,8 @@ public:
     virtual ~IUiAdapter() = default;
 
     virtual bool showPage(uint32_t pageId) = 0;
-    virtual bool setText(uint32_t elementId, const char* text) = 0;
-    virtual bool setValue(uint32_t elementId, int32_t value) = 0;
-    virtual bool setVisible(uint32_t elementId, bool visible) = 0;
-    virtual bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) = 0;
     // Применить один типизированный атрибут элемента (width/height/цвет/шрифт и т.д.).
     virtual bool setElementAttribute(const SetElementAttribute& attr) = 0;
-    virtual bool applyBatch(const SetBatch& batch) = 0;
 
     // Зарегистрировать обработчик исходящих UI-событий.
     virtual void setEventSink(EventSink sink, void* userData) = 0;

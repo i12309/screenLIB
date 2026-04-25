@@ -101,44 +101,9 @@ public:
         return true;
     }
 
-    bool setText(uint32_t elementId, const char* text) override {
-        setTextCount++;
-        lastTextElementId = elementId;
-        copyTextSafe(lastText, sizeof(lastText), text);
-        return true;
-    }
-
-    bool setValue(uint32_t elementId, int32_t value) override {
-        setValueCount++;
-        lastValueElementId = elementId;
-        lastValue = value;
-        return true;
-    }
-
-    bool setVisible(uint32_t elementId, bool visible) override {
-        setVisibleCount++;
-        lastVisibleElementId = elementId;
-        lastVisible = visible;
-        return true;
-    }
-
-    bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor) override {
-        setColorCount++;
-        lastColorElementId = elementId;
-        lastBgColor = bgColor;
-        lastFgColor = fgColor;
-        return true;
-    }
-
     bool setElementAttribute(const SetElementAttribute& attr) override {
         setElementAttributeCount++;
         lastElementAttribute = attr;
-        return true;
-    }
-
-    bool applyBatch(const SetBatch& batch) override {
-        applyBatchCount++;
-        lastBatch = batch;
         return true;
     }
 
@@ -176,39 +141,16 @@ public:
     EventSink currentSink() const { return _sink; }
 
     int showPageCount = 0;
-    int setTextCount = 0;
-    int setValueCount = 0;
-    int setVisibleCount = 0;
-    int setColorCount = 0;
     int setElementAttributeCount = 0;
-    int applyBatchCount = 0;
     int setEventSinkCalls = 0;
     int clearEventSinkCalls = 0;
     int tickInputCalls = 0;
 
     uint32_t lastPageId = 0;
-    uint32_t lastTextElementId = 0;
-    char lastText[64] = {};
-    uint32_t lastValueElementId = 0;
-    int32_t lastValue = 0;
-    uint32_t lastVisibleElementId = 0;
-    bool lastVisible = false;
-    uint32_t lastColorElementId = 0;
-    uint32_t lastBgColor = 0;
-    uint32_t lastFgColor = 0;
     SetElementAttribute lastElementAttribute = SetElementAttribute_init_zero;
-    SetBatch lastBatch = SetBatch_init_zero;
     std::vector<bool> emitResults;
 
 private:
-    static void copyTextSafe(char* dst, size_t dstSize, const char* src) {
-        if (dst == nullptr || dstSize == 0) return;
-        dst[0] = '\0';
-        if (src == nullptr) return;
-        strncpy(dst, src, dstSize - 1);
-        dst[dstSize - 1] = '\0';
-    }
-
     EventSink _sink = nullptr;
     void* _sinkUser = nullptr;
     std::vector<Envelope> _pendingEvents;
@@ -265,47 +207,13 @@ void test_screen_client_incoming_show_page_reaches_ui() {
     TEST_ASSERT_EQUAL_UINT32(7, adapter.lastPageId);
 }
 
-void test_screen_client_incoming_commands_reach_ui() {
+void test_screen_client_incoming_attribute_command_reaches_ui() {
     MockTransport transport;
     FakeUiAdapter adapter;
     screenlib::client::ScreenClient client(transport);
 
     client.setUiAdapter(&adapter);
     client.init();
-
-    Envelope setText{};
-    setText.which_payload = Envelope_set_text_tag;
-    setText.payload.set_text.element_id = 10;
-    strncpy(setText.payload.set_text.text, "hello", sizeof(setText.payload.set_text.text) - 1);
-    setText.payload.set_text.text[sizeof(setText.payload.set_text.text) - 1] = '\0';
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setText, 1));
-
-    Envelope setValue{};
-    setValue.which_payload = Envelope_set_value_tag;
-    setValue.payload.set_value.element_id = 20;
-    setValue.payload.set_value.value = 321;
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setValue, 2));
-
-    Envelope setVisible{};
-    setVisible.which_payload = Envelope_set_visible_tag;
-    setVisible.payload.set_visible.element_id = 30;
-    setVisible.payload.set_visible.visible = true;
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setVisible, 3));
-
-    Envelope setColor{};
-    setColor.which_payload = Envelope_set_color_tag;
-    setColor.payload.set_color.element_id = 40;
-    setColor.payload.set_color.bg_color = 0x1234;
-    setColor.payload.set_color.fg_color = 0x5678;
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setColor, 4));
-
-    Envelope setBatch{};
-    setBatch.which_payload = Envelope_set_batch_tag;
-    setBatch.payload.set_batch.texts_count = 1;
-    setBatch.payload.set_batch.texts[0].element_id = 100;
-    strncpy(setBatch.payload.set_batch.texts[0].text, "batch", sizeof(setBatch.payload.set_batch.texts[0].text) - 1);
-    setBatch.payload.set_batch.texts[0].text[sizeof(setBatch.payload.set_batch.texts[0].text) - 1] = '\0';
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setBatch, 5));
 
     Envelope setElementAttribute{};
     setElementAttribute.which_payload = Envelope_set_element_attribute_tag;
@@ -315,31 +223,9 @@ void test_screen_client_incoming_commands_reach_ui() {
     setElementAttribute.payload.set_element_attribute.which_value =
         SetElementAttribute_int_value_tag;
     setElementAttribute.payload.set_element_attribute.value.int_value = 3;
-    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttribute, 6));
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, setElementAttribute, 1));
 
     client.tick();
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.setTextCount);
-    TEST_ASSERT_EQUAL_UINT32(10, adapter.lastTextElementId);
-    TEST_ASSERT_EQUAL_STRING("hello", adapter.lastText);
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.setValueCount);
-    TEST_ASSERT_EQUAL_UINT32(20, adapter.lastValueElementId);
-    TEST_ASSERT_EQUAL_INT32(321, adapter.lastValue);
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.setVisibleCount);
-    TEST_ASSERT_EQUAL_UINT32(30, adapter.lastVisibleElementId);
-    TEST_ASSERT_TRUE(adapter.lastVisible);
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.setColorCount);
-    TEST_ASSERT_EQUAL_UINT32(40, adapter.lastColorElementId);
-    TEST_ASSERT_EQUAL_UINT32(0x1234, adapter.lastBgColor);
-    TEST_ASSERT_EQUAL_UINT32(0x5678, adapter.lastFgColor);
-
-    TEST_ASSERT_EQUAL_INT(1, adapter.applyBatchCount);
-    TEST_ASSERT_EQUAL_UINT8(1, adapter.lastBatch.texts_count);
-    TEST_ASSERT_EQUAL_UINT32(100, adapter.lastBatch.texts[0].element_id);
-    TEST_ASSERT_EQUAL_STRING("batch", adapter.lastBatch.texts[0].text);
 
     TEST_ASSERT_EQUAL_INT(1, adapter.setElementAttributeCount);
     TEST_ASSERT_EQUAL_UINT32(70, adapter.lastElementAttribute.element_id);
@@ -521,12 +407,7 @@ void test_screen_client_incoming_non_screen_envelope_does_not_touch_ui() {
     client.tick();
 
     TEST_ASSERT_EQUAL_INT(0, adapter.showPageCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.setTextCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.setValueCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.setVisibleCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.setColorCount);
     TEST_ASSERT_EQUAL_INT(0, adapter.setElementAttributeCount);
-    TEST_ASSERT_EQUAL_INT(0, adapter.applyBatchCount);
 }
 
 void test_screen_client_init_is_idempotent() {
@@ -558,26 +439,8 @@ void test_screen_client_service_helpers_send_responses() {
     TEST_ASSERT_TRUE(client.sendHello(info));
     TEST_ASSERT_TRUE(client.sendCurrentPage(12, 401));
 
-    PageState pageState = PageState_init_zero;
-    pageState.request_id = 402;
-    pageState.page_id = 12;
-    pageState.elements_count = 1;
-    pageState.elements[0].element_id = 500;
-    pageState.elements[0].type = ElementStateType_ELEMENT_STATE_INT;
-    pageState.elements[0].which_value = PageElementState_int_value_tag;
-    pageState.elements[0].value.int_value = 77;
-    TEST_ASSERT_TRUE(client.sendPageState(pageState));
-
-    ElementState elementState = ElementState_init_zero;
-    elementState.request_id = 403;
-    elementState.page_id = 12;
-    elementState.found = true;
-    elementState.has_element = true;
-    elementState.element = pageState.elements[0];
-    TEST_ASSERT_TRUE(client.sendElementState(elementState));
-
     ElementAttributeState elementAttributeState = ElementAttributeState_init_zero;
-    elementAttributeState.request_id = 404;
+    elementAttributeState.request_id = 402;
     elementAttributeState.page_id = 12;
     elementAttributeState.element_id = 500;
     elementAttributeState.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH;
@@ -587,7 +450,7 @@ void test_screen_client_service_helpers_send_responses() {
     TEST_ASSERT_TRUE(client.sendElementAttributeState(elementAttributeState));
 
     std::vector<Envelope> out;
-    TEST_ASSERT_EQUAL_UINT32(5u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(3u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 
     TEST_ASSERT_EQUAL_UINT32(Envelope_hello_tag, out[0].which_payload);
     TEST_ASSERT_TRUE(out[0].payload.hello.has_device_info);
@@ -598,30 +461,20 @@ void test_screen_client_service_helpers_send_responses() {
     TEST_ASSERT_EQUAL_UINT32(401, out[1].payload.current_page.request_id);
     TEST_ASSERT_EQUAL_UINT32(12, out[1].payload.current_page.page_id);
 
-    TEST_ASSERT_EQUAL_UINT32(Envelope_page_state_tag, out[2].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(402, out[2].payload.page_state.request_id);
-    TEST_ASSERT_EQUAL_UINT32(12, out[2].payload.page_state.page_id);
-    TEST_ASSERT_EQUAL_UINT8(1, out[2].payload.page_state.elements_count);
-    TEST_ASSERT_EQUAL_UINT32(500, out[2].payload.page_state.elements[0].element_id);
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_element_state_tag, out[3].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(403, out[3].payload.element_state.request_id);
-    TEST_ASSERT_TRUE(out[3].payload.element_state.has_element);
-
-    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[4].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(404, out[4].payload.element_attribute_state.request_id);
-    TEST_ASSERT_EQUAL_UINT32(12, out[4].payload.element_attribute_state.page_id);
-    TEST_ASSERT_EQUAL_UINT32(500, out[4].payload.element_attribute_state.element_id);
-    TEST_ASSERT_TRUE(out[4].payload.element_attribute_state.found);
-    TEST_ASSERT_EQUAL_UINT32(ElementAttributeState_int_value_tag, out[4].payload.element_attribute_state.which_value);
-    TEST_ASSERT_EQUAL_INT32(123, out[4].payload.element_attribute_state.value.int_value);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_element_attribute_state_tag, out[2].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(402, out[2].payload.element_attribute_state.request_id);
+    TEST_ASSERT_EQUAL_UINT32(12, out[2].payload.element_attribute_state.page_id);
+    TEST_ASSERT_EQUAL_UINT32(500, out[2].payload.element_attribute_state.element_id);
+    TEST_ASSERT_TRUE(out[2].payload.element_attribute_state.found);
+    TEST_ASSERT_EQUAL_UINT32(ElementAttributeState_int_value_tag, out[2].payload.element_attribute_state.which_value);
+    TEST_ASSERT_EQUAL_INT32(123, out[2].payload.element_attribute_state.value.int_value);
 }
 
 }  // namespace
 
 void run_all_tests() {
     RUN_TEST(test_screen_client_incoming_show_page_reaches_ui);
-    RUN_TEST(test_screen_client_incoming_commands_reach_ui);
+    RUN_TEST(test_screen_client_incoming_attribute_command_reaches_ui);
     RUN_TEST(test_screen_client_tick_without_ui_adapter_is_safe);
     RUN_TEST(test_screen_client_outgoing_button_event_from_adapter);
     RUN_TEST(test_screen_client_outgoing_button_event_with_action_from_adapter);

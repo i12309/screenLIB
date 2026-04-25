@@ -24,8 +24,6 @@
 
 static constexpr uint8_t  kFrameSof     = 0xAB;  // маркер начала кадра
 static constexpr uint8_t  kFrameVer     = 1;      // версия протокола
-// 1024: SetBatch[8] с текстами по 32 байта занимает ~490 байт.
-// 512 было мало — SetBatch превышал лимит при 16 элементах по 64 байта.
 static constexpr size_t   kMaxPayload   = 1024;   // макс. байт payload
 static constexpr size_t   kFrameOverhead = 7;     // SOF+ver+seq+len(2)+crc(2)
 // Ring buffer N-1: при kFrameQueueLen=5 реальная ёмкость = 4 кадра

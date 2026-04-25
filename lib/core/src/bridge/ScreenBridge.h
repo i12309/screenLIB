@@ -46,12 +46,7 @@ public:
 
     // Базовые UI-команды (сторона host -> сторона screen).
     bool showPage(uint32_t pageId, uint32_t sessionId = 0);
-    bool setText(uint32_t elementId, const char* text);
-    bool setValue(uint32_t elementId, int32_t value);
-    bool setVisible(uint32_t elementId, bool visible);
     bool sendHeartbeat(uint32_t uptimeMs);
-    // Пакетная отправка нескольких set-команд (с безопасной санитизацией).
-    bool sendBatch(const SetBatch& batch);
 
     // Типизированные атрибуты UI (сторона host -> сторона screen).
     // С безопасной проверкой соответствия attribute <-> value.
@@ -66,21 +61,15 @@ public:
     bool sendHello(const DeviceInfo& deviceInfo);
     bool requestDeviceInfo(uint32_t requestId = 0);
     bool requestCurrentPage(uint32_t requestId = 0);
-    bool requestPageState(uint32_t pageId, uint32_t requestId = 0);
-    bool requestElementState(uint32_t elementId, uint32_t pageId = 0, uint32_t requestId = 0);
 
     // Сервисные вспомогательные методы ответов (обычно screen -> host).
     bool sendDeviceInfo(const DeviceInfo& deviceInfo);
     bool sendCurrentPage(uint32_t pageId, uint32_t requestId = 0);
-    bool sendPageState(const PageState& pageState);
-    bool sendElementState(const ElementState& elementState);
     // Ответ на request_element_attribute.
     bool sendElementAttributeState(const ElementAttributeState& state);
 
 private:
     static constexpr size_t kReadChunkSize = 256;
-    static constexpr uint8_t kMaxBatchCount = 8;
-
     ITransport& _transport;
     FrameCodec _frameCodec;
     uint8_t _txSeq = 0;
@@ -98,16 +87,6 @@ private:
     bool sendFramePayload(const uint8_t* payload, size_t payloadLen);
     void dispatchEnvelope(const Envelope& env) const;
     Envelope& prepareTxEnvelope(pb_size_t payloadTag);
-
-    // Безопасное копирование C-строки в protobuf-буфер.
-    static void copyTextSafe(char* dst, size_t dstSize, const char* src);
-
-    // Валидация/нормализация обычного SetBatch.
-    static uint8_t clampBatchCount(uint8_t value);
-    static void sanitizeBatch(const SetBatch& src, SetBatch& dst);
-    // Резервный путь для транспорта, где большой batch не прошел.
-    bool sendBatchSplit(const SetBatch& batch);
-    bool setColor(uint32_t elementId, uint32_t bgColor, uint32_t fgColor);
 
     // Валидация/нормализация типизированных атрибутов.
     static bool sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst);
