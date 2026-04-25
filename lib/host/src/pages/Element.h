@@ -10,6 +10,36 @@
 #include "proto/machine.pb.h"
 #include "runtime/PageRuntime.h"
 
+// Nanopb генерирует enum names с префиксом типа
+// (ElementAttribute_ELEMENT_ATTRIBUTE_*), а ScreenUI generated-код
+// использует короткие имена ELEMENT_ATTRIBUTE_* как значения enum.
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_UNKNOWN =
+    ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_VISIBLE =
+    ElementAttribute_ELEMENT_ATTRIBUTE_VISIBLE;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_POSITION_WIDTH =
+    ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_POSITION_HEIGHT =
+    ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_X =
+    ElementAttribute_ELEMENT_ATTRIBUTE_X;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_Y =
+    ElementAttribute_ELEMENT_ATTRIBUTE_Y;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_BACKGROUND_COLOR =
+    ElementAttribute_ELEMENT_ATTRIBUTE_BACKGROUND_COLOR;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_TEXT_COLOR =
+    ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_TEXT_FONT =
+    ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_VALUE =
+    ElementAttribute_ELEMENT_ATTRIBUTE_VALUE;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_TEXT =
+    ElementAttribute_ELEMENT_ATTRIBUTE_TEXT;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_BORDER_COLOR =
+    ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_COLOR;
+static constexpr ElementAttribute ELEMENT_ATTRIBUTE_BORDER_WIDTH =
+    ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH;
+
 namespace screenlib {
 
 // ============================================================
