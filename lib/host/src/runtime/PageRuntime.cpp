@@ -1,8 +1,10 @@
 #include "PageRuntime.h"
 
 #include <cstring>
+#include <memory>
 
 #include "bridge/ScreenBridge.h"
+#include "chunk/TextChunkSender.h"
 #include "config/ScreenConfig.h"
 #include "log/ScreenLibLogger.h"
 
@@ -53,14 +55,15 @@ bool copyAttributeValueToSetCmd(const ElementAttributeValue& src, SetElementAttr
             dst.value.bool_value = src.value.bool_value;
             return true;
         case ElementAttributeValue_string_value_tag:
-            dst.which_value = SetElementAttribute_string_value_tag;
-            std::strncpy(dst.value.string_value, src.value.string_value,
-                         sizeof(dst.value.string_value) - 1);
-            dst.value.string_value[sizeof(dst.value.string_value) - 1] = '\0';
-            return true;
+            return false;
         default:
             return false;
     }
+}
+
+bool sendEnvelopeToBridge(const Envelope& env, void* userData) {
+    ScreenBridge* bridge = static_cast<ScreenBridge*>(userData);
+    return bridge != nullptr && bridge->sendEnvelope(env);
 }
 
 }  // namespace
@@ -80,6 +83,15 @@ void PageRuntime::tick() {
     }
     if (_web != nullptr) {
         _web->poll();
+    }
+
+    TextChunkAbort abort = TextChunkAbort_init_zero;
+    while (_textAssembler.pollTimeout(nowMs(), abort)) {
+        SCREENLIB_LOGW(kLogTag,
+                       "text chunk assembly timeout transfer=%u request=%u",
+                       static_cast<unsigned>(abort.transfer_id),
+                       static_cast<unsigned>(abort.request_id));
+        sendTextChunkAbortByMode(abort);
     }
 
     if (_current != nullptr && _current->_shown) {
@@ -177,19 +189,36 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
         _nextRequestId = 1;  // wrap, 0 зарезервирован
     }
 
-    SetElementAttribute cmd = SetElementAttribute_init_zero;
-    cmd.element_id = elementId;
-    cmd.request_id = reqId;
-    cmd.session_id = _model.sessionId();
-    if (!copyAttributeValueToSetCmd(v, cmd)) {
-        SCREENLIB_LOGW(kLogTag,
-                       "sendSetAttribute: unsupported value tag=%u element=%u",
-                       static_cast<unsigned>(v.which_value),
-                       static_cast<unsigned>(elementId));
-        return kInvalidRequestId;
+    bool sent = false;
+    if (v.which_value == ElementAttributeValue_string_value_tag) {
+        const uint32_t transferId = _nextTransferId++;
+        if (_nextTransferId == 0) {
+            _nextTransferId = 1;
+        }
+        sent = sendTextChunksByMode(TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE,
+                                    transferId,
+                                    _model.sessionId(),
+                                    _model.pageId(),
+                                    elementId,
+                                    v.attribute,
+                                    reqId,
+                                    v.value.string_value);
+    } else {
+        SetElementAttribute cmd = SetElementAttribute_init_zero;
+        cmd.element_id = elementId;
+        cmd.request_id = reqId;
+        cmd.session_id = _model.sessionId();
+        if (!copyAttributeValueToSetCmd(v, cmd)) {
+            SCREENLIB_LOGW(kLogTag,
+                           "sendSetAttribute: unsupported value tag=%u element=%u",
+                           static_cast<unsigned>(v.which_value),
+                           static_cast<unsigned>(elementId));
+            return kInvalidRequestId;
+        }
+        sent = sendSetElementAttributeByMode(cmd);
     }
 
-    if (!sendSetElementAttributeByMode(cmd)) {
+    if (!sent) {
         setLinkUp(false);
         return kInvalidRequestId;
     }
@@ -292,6 +321,64 @@ bool PageRuntime::sendSetElementAttributeByMode(const SetElementAttribute& cmd) 
 
 // ---------- Приём входящих ----------
 
+bool PageRuntime::sendTextChunksByMode(TextChunkKind kind,
+                                       uint32_t transferId,
+                                       uint32_t sessionId,
+                                       uint32_t pageId,
+                                       uint32_t elementId,
+                                       ElementAttribute attribute,
+                                       uint32_t requestId,
+                                       const char* text) {
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr &&
+                   chunk::sendTextChunks(&sendEnvelopeToBridge, _physical, kind, transferId,
+                                         sessionId, pageId, elementId, attribute, requestId, text);
+        case MirrorMode::WebOnly:
+            return _web != nullptr &&
+                   chunk::sendTextChunks(&sendEnvelopeToBridge, _web, kind, transferId,
+                                         sessionId, pageId, elementId, attribute, requestId, text);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = chunk::sendTextChunks(&sendEnvelopeToBridge, _physical, kind, transferId,
+                                            sessionId, pageId, elementId, attribute, requestId, text) || any;
+            }
+            if (_web != nullptr) {
+                any = chunk::sendTextChunks(&sendEnvelopeToBridge, _web, kind, transferId,
+                                            sessionId, pageId, elementId, attribute, requestId, text) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
+bool PageRuntime::sendTextChunkAbortByMode(const TextChunkAbort& abort) {
+    std::unique_ptr<Envelope> env(new Envelope);
+    std::memset(env.get(), 0, sizeof(*env));
+    env->which_payload = Envelope_text_chunk_abort_tag;
+    env->payload.text_chunk_abort = abort;
+
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr && _physical->sendEnvelope(*env);
+        case MirrorMode::WebOnly:
+            return _web != nullptr && _web->sendEnvelope(*env);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = _physical->sendEnvelope(*env) || any;
+            }
+            if (_web != nullptr) {
+                any = _web->sendEnvelope(*env) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
 void PageRuntime::notifyDeviceInfo(const DeviceInfo& info) {
     if (_deviceInfoListener != nullptr) {
         _deviceInfoListener(info, _deviceInfoListenerUser);
@@ -346,6 +433,65 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             _model.applyRemoteChange(msg);
             break;
         }
+        case Envelope_text_chunk_tag: {
+            chunk::AssembledText text;
+            TextChunkAbort abort = TextChunkAbort_init_zero;
+            if (!_textAssembler.push(env.payload.text_chunk, nowMs(), text, abort)) {
+                if (abort.transfer_id != 0) {
+                    SCREENLIB_LOGW(kLogTag,
+                                   "text chunk rejected transfer=%u reason=%d",
+                                   static_cast<unsigned>(abort.transfer_id),
+                                   static_cast<int>(abort.reason));
+                    sendTextChunkAbortByMode(abort);
+                }
+                break;
+            }
+
+            if (text.kind == TextChunkKind_TEXT_CHUNK_INPUT_EVENT) {
+                if (text.sessionId != 0 && text.sessionId != _model.sessionId()) {
+                    SCREENLIB_LOGW(kLogTag,
+                                   "stale text input ignored: session=%u/%u element=%u",
+                                   static_cast<unsigned>(text.sessionId),
+                                   static_cast<unsigned>(_model.sessionId()),
+                                   static_cast<unsigned>(text.elementId));
+                    break;
+                }
+                if (_current != nullptr) {
+                    _current->onInputText(text.elementId, text.text.c_str());
+                }
+                break;
+            }
+
+            if (text.kind == TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED) {
+                if (text.pageId != _model.pageId() || text.sessionId != _model.sessionId()) {
+                    SCREENLIB_LOGW(kLogTag,
+                                   "stale text attribute ignored: page=%u/%u session=%u/%u element=%u",
+                                   static_cast<unsigned>(text.pageId),
+                                   static_cast<unsigned>(_model.pageId()),
+                                   static_cast<unsigned>(text.sessionId),
+                                   static_cast<unsigned>(_model.sessionId()),
+                                   static_cast<unsigned>(text.elementId));
+                    break;
+                }
+                if (text.requestId != kInvalidRequestId) {
+                    removePending(text.requestId);
+                }
+                _model.setString(text.elementId, text.attribute, text.text.c_str());
+            }
+            break;
+        }
+        case Envelope_text_chunk_abort_tag: {
+            const TextChunkAbort& abort = env.payload.text_chunk_abort;
+            if (abort.request_id != kInvalidRequestId) {
+                removePending(abort.request_id);
+            }
+            SCREENLIB_LOGW(kLogTag,
+                           "peer aborted text chunk transfer=%u request=%u reason=%d",
+                           static_cast<unsigned>(abort.transfer_id),
+                           static_cast<unsigned>(abort.request_id),
+                           static_cast<int>(abort.reason));
+            break;
+        }
         case Envelope_button_event_tag: {
             const ButtonEvent& ev = env.payload.button_event;
             if (ev.session_id != 0 && ev.session_id != _model.sessionId()) {
@@ -375,9 +521,6 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             switch (ev.which_value) {
                 case InputEvent_int_value_tag:
                     _current->onInputInt(ev.element_id, ev.value.int_value);
-                    break;
-                case InputEvent_string_value_tag:
-                    _current->onInputText(ev.element_id, ev.value.string_value);
                     break;
                 default:
                     break;

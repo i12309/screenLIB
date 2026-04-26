@@ -1,10 +1,13 @@
 #include <deque>
+#include <string>
 #include <string.h>
 #include <vector>
 
 #include <unity.h>
 
 #include "bridge/ScreenBridge.h"
+#include "chunk/TextChunkAssembler.h"
+#include "chunk/TextChunkSender.h"
 #include "frame/FrameCodec.h"
 #include "proto/ProtoCodec.h"
 
@@ -218,6 +221,86 @@ void test_screen_bridge_resets_parser_on_disconnect_reconnect() {
     TEST_ASSERT_EQUAL_INT(1, gBridgeCapture.count);
 }
 
+bool captureTextChunkEnvelope(const Envelope& env, void* userData) {
+    std::vector<Envelope>* out = static_cast<std::vector<Envelope>*>(userData);
+    if (out == nullptr) {
+        return false;
+    }
+    out->push_back(env);
+    return true;
+}
+
+void test_text_chunk_sender_short_and_empty_text() {
+    std::vector<Envelope> out;
+
+    TEST_ASSERT_TRUE(screenlib::chunk::sendTextChunks(
+        &captureTextChunkEnvelope,
+        &out,
+        TextChunkKind_TEXT_CHUNK_INPUT_EVENT,
+        10,
+        2,
+        3,
+        4,
+        ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN,
+        0,
+        "abc"));
+    TEST_ASSERT_EQUAL_UINT32(1, out.size());
+    TEST_ASSERT_EQUAL_UINT32(Envelope_text_chunk_tag, out[0].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(1, out[0].payload.text_chunk.chunk_count);
+    TEST_ASSERT_EQUAL_UINT32(3, out[0].payload.text_chunk.chunk_data.size);
+    TEST_ASSERT_EQUAL_MEMORY("abc", out[0].payload.text_chunk.chunk_data.bytes, 3);
+
+    out.clear();
+    TEST_ASSERT_TRUE(screenlib::chunk::sendTextChunks(
+        &captureTextChunkEnvelope,
+        &out,
+        TextChunkKind_TEXT_CHUNK_INPUT_EVENT,
+        11,
+        2,
+        3,
+        4,
+        ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN,
+        0,
+        ""));
+    TEST_ASSERT_EQUAL_UINT32(1, out.size());
+    TEST_ASSERT_EQUAL_UINT32(1, out[0].payload.text_chunk.chunk_count);
+    TEST_ASSERT_EQUAL_UINT32(0, out[0].payload.text_chunk.chunk_data.size);
+}
+
+void test_text_chunk_assembler_rebuilds_utf8_out_of_order() {
+    std::string text;
+    for (int i = 0; i < 70; ++i) {
+        text += "Привет";
+    }
+
+    std::vector<Envelope> chunks;
+    TEST_ASSERT_TRUE(screenlib::chunk::sendTextChunks(
+        &captureTextChunkEnvelope,
+        &chunks,
+        TextChunkKind_TEXT_CHUNK_INPUT_EVENT,
+        12,
+        2,
+        3,
+        4,
+        ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN,
+        0,
+        text.c_str()));
+    TEST_ASSERT_GREATER_THAN(1, chunks.size());
+
+    screenlib::chunk::TextChunkAssembler assembler;
+    screenlib::chunk::AssembledText assembled;
+    TextChunkAbort abort = TextChunkAbort_init_zero;
+    for (std::size_t i = chunks.size(); i > 0; --i) {
+        const bool complete = assembler.push(chunks[i - 1].payload.text_chunk, 100, assembled, abort);
+        if (i > 1) {
+            TEST_ASSERT_FALSE(complete);
+        } else {
+            TEST_ASSERT_TRUE(complete);
+        }
+    }
+    TEST_ASSERT_EQUAL_STRING(text.c_str(), assembled.text.c_str());
+}
+
 }  // namespace
 
 void run_all_tests() {
@@ -225,6 +308,8 @@ void run_all_tests() {
     RUN_TEST(test_screen_bridge_service_helpers_encode_envelopes);
     RUN_TEST(test_screen_bridge_attribute_helpers_encode_envelopes);
     RUN_TEST(test_screen_bridge_resets_parser_on_disconnect_reconnect);
+    RUN_TEST(test_text_chunk_sender_short_and_empty_text);
+    RUN_TEST(test_text_chunk_assembler_rebuilds_utf8_out_of_order);
 }
 
 #ifdef ARDUINO

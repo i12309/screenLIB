@@ -81,8 +81,8 @@ private:
     uint8_t _readBuf[kReadChunkSize] = {};
     uint8_t _protoTxBuf[ProtoCodec::kMaxEncodedSize] = {};
     uint8_t _frameTxBuf[kMaxPayload + kFrameOverhead] = {};
-    Envelope _txEnvelope = Envelope_init_zero;
-    Envelope _rxEnvelope = Envelope_init_zero;
+    Envelope _txEnvelope = {};
+    Envelope _rxEnvelope = {};
 
     bool sendFramePayload(const uint8_t* payload, size_t payloadLen);
     void dispatchEnvelope(const Envelope& env) const;

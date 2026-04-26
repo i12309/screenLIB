@@ -1,4 +1,5 @@
 #include "ProtoCodec.h"
+#include <string.h>
 #include <pb_encode.h>
 #include <pb_decode.h>
 
@@ -28,7 +29,7 @@ bool ProtoCodec::decode(const uint8_t* data, size_t len, Envelope& out) {
     pb_istream_t stream = pb_istream_from_buffer(data, len);
 
     // Обнуляем структуру перед декодом — nanopb не трогает незаданные поля
-    out = Envelope{};
+    memset(&out, 0, sizeof(out));
 
     if (!pb_decode(&stream, Envelope_fields, &out)) {
         _lastError = PB_GET_ERROR(&stream);

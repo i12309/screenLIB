@@ -58,7 +58,7 @@ public:
 
 private:
     // Размер внутренней очереди событий UI -> controller.
-    static constexpr size_t kUiEventQueueSize = 8;
+    static constexpr size_t kUiEventQueueSize = 16;
 
     ITransport& _transport;
     ScreenBridge _bridge;
@@ -71,10 +71,11 @@ private:
     void* _eventUser = nullptr;
 
     Envelope _uiEvents[kUiEventQueueSize] = {};
-    Envelope _scratchEnvelope = Envelope_init_zero;
+    Envelope _scratchEnvelope = {};
     size_t _uiEventHead = 0;
     size_t _uiEventTail = 0;
     size_t _uiEventCount = 0;
+    uint32_t _nextTransferId = 1;
 
     static void onBridgeEnvelopeStatic(const Envelope& env, void* userData);
     void onBridgeEnvelope(const Envelope& env);

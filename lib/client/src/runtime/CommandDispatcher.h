@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IUiAdapter.h"
+#include "chunk/TextChunkAssembler.h"
 
 namespace screenlib::client {
 
@@ -18,6 +19,7 @@ public:
 
 private:
     screenlib::adapter::IUiAdapter& _uiAdapter;
+    screenlib::chunk::TextChunkAssembler _textAssembler;
 };
 
 }  // namespace screenlib::client

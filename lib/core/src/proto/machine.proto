@@ -43,6 +43,8 @@ message Envelope {
     ElementAttributeState    element_attribute_state     = 22; // screen -> backend
     PageSnapshot             page_snapshot               = 23; // screen -> backend (полный слепок страницы)
     AttributeChanged         attribute_changed           = 24; // screen -> backend (дельта + ACK команды)
+    TextChunk                text_chunk                  = 25;
+    TextChunkAbort           text_chunk_abort            = 26;
   }
 }
 
@@ -82,6 +84,41 @@ enum ElementAttribute {
   ELEMENT_ATTRIBUTE_Y       = 12;  // int32
 }
 
+enum TextChunkKind {
+  TEXT_CHUNK_SET_ATTRIBUTE = 0;
+  TEXT_CHUNK_INPUT_EVENT = 1;
+  TEXT_CHUNK_ATTRIBUTE_CHANGED = 2;
+}
+
+enum TextChunkAbortReason {
+  TEXT_CHUNK_ABORT_UNKNOWN = 0;
+  TEXT_CHUNK_ABORT_TIMEOUT = 1;
+  TEXT_CHUNK_ABORT_OVERFLOW = 2;
+  TEXT_CHUNK_ABORT_BAD_INDEX = 3;
+  TEXT_CHUNK_ABORT_METADATA_CHANGED = 4;
+}
+
+message TextChunk {
+  uint32 transfer_id = 1;
+  uint32 session_id = 2;
+  uint32 page_id = 3;
+  uint32 element_id = 4;
+  ElementAttribute attribute = 5;
+
+  uint32 chunk_index = 6;
+  uint32 chunk_count = 7;
+  bytes chunk_data = 8;
+
+  uint32 request_id = 9;
+  TextChunkKind kind = 10;
+}
+
+message TextChunkAbort {
+  uint32 transfer_id = 1;
+  uint32 request_id = 2;
+  TextChunkAbortReason reason = 3;
+}
+
 // Типизированный id шрифта для text.font.
 enum ElementFont {
   ELEMENT_FONT_UNKNOWN = 0;
@@ -98,6 +135,8 @@ enum ElementFont {
 // session_id — эпоха страницы. 0 допустим для legacy-совместимости
 // (получатель не проверяет).
 message SetElementAttribute {
+  reserved 9;
+  reserved "string_value";
   uint32 element_id = 1;
   ElementAttribute attribute = 2;
   oneof value {
@@ -105,7 +144,6 @@ message SetElementAttribute {
     uint32 color_value = 4; // RGB888
     ElementFont font_value = 5;
     bool bool_value = 8;
-    string string_value = 9;
   }
   uint32 request_id = 6;
   uint32 session_id = 7;
@@ -184,11 +222,12 @@ message ButtonEvent {
 // Ввод данных пользователем (числовой input, поле текста).
 // session_id — эпоха страницы на момент события.
 message InputEvent {
+  reserved 4;
+  reserved "string_value";
   uint32 element_id = 1;
   uint32 page_id    = 2;
   oneof value {
     int32  int_value    = 3;
-    string string_value = 4;  // макс. 64 символа (см. machine.options)
   }
   uint32 session_id = 5;
 }

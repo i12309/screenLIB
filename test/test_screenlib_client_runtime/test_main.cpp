@@ -177,13 +177,19 @@ Envelope makeInputEventInt(uint32_t elementId, uint32_t pageId, int32_t value) {
 
 Envelope makeInputEventString(uint32_t elementId, uint32_t pageId, const char* text) {
     Envelope env{};
-    env.which_payload = Envelope_input_event_tag;
-    env.payload.input_event.element_id = elementId;
-    env.payload.input_event.page_id = pageId;
-    env.payload.input_event.which_value = InputEvent_string_value_tag;
-    if (text != nullptr) {
-        strncpy(env.payload.input_event.value.string_value, text, sizeof(env.payload.input_event.value.string_value) - 1);
-        env.payload.input_event.value.string_value[sizeof(env.payload.input_event.value.string_value) - 1] = '\0';
+    env.which_payload = Envelope_text_chunk_tag;
+    env.payload.text_chunk.transfer_id = 1;
+    env.payload.text_chunk.page_id = pageId;
+    env.payload.text_chunk.element_id = elementId;
+    env.payload.text_chunk.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN;
+    env.payload.text_chunk.chunk_index = 0;
+    env.payload.text_chunk.chunk_count = 1;
+    env.payload.text_chunk.kind = TextChunkKind_TEXT_CHUNK_INPUT_EVENT;
+    const char* safeText = text != nullptr ? text : "";
+    const size_t len = strlen(safeText);
+    env.payload.text_chunk.chunk_data.size = static_cast<pb_size_t>(len);
+    if (len > 0) {
+        memcpy(env.payload.text_chunk.chunk_data.bytes, safeText, len);
     }
     return env;
 }
@@ -309,11 +315,13 @@ void test_screen_client_outgoing_input_events_from_adapter() {
     TEST_ASSERT_EQUAL_UINT32(InputEvent_int_value_tag, out[0].payload.input_event.which_value);
     TEST_ASSERT_EQUAL_INT32(1234, out[0].payload.input_event.value.int_value);
 
-    TEST_ASSERT_EQUAL_UINT32(Envelope_input_event_tag, out[1].which_payload);
-    TEST_ASSERT_EQUAL_UINT32(62, out[1].payload.input_event.element_id);
-    TEST_ASSERT_EQUAL_UINT32(8, out[1].payload.input_event.page_id);
-    TEST_ASSERT_EQUAL_UINT32(InputEvent_string_value_tag, out[1].payload.input_event.which_value);
-    TEST_ASSERT_EQUAL_STRING("abc", out[1].payload.input_event.value.string_value);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_text_chunk_tag, out[1].which_payload);
+    TEST_ASSERT_EQUAL_UINT32(62, out[1].payload.text_chunk.element_id);
+    TEST_ASSERT_EQUAL_UINT32(8, out[1].payload.text_chunk.page_id);
+    TEST_ASSERT_EQUAL_UINT32(TextChunkKind_TEXT_CHUNK_INPUT_EVENT, out[1].payload.text_chunk.kind);
+    TEST_ASSERT_EQUAL_UINT32(1, out[1].payload.text_chunk.chunk_count);
+    TEST_ASSERT_EQUAL_UINT32(3, out[1].payload.text_chunk.chunk_data.size);
+    TEST_ASSERT_EQUAL_MEMORY("abc", out[1].payload.text_chunk.chunk_data.bytes, 3);
 }
 
 void test_screen_client_set_ui_adapter_rebinds_sink() {
@@ -349,27 +357,27 @@ void test_screen_client_ui_event_queue_overflow_is_safe() {
     client.setUiAdapter(&adapter);
     client.init();
 
-    // kUiEventQueueSize = 8, добавляем больше.
-    for (uint32_t i = 0; i < 10; ++i) {
+    // kUiEventQueueSize = 16, добавляем больше.
+    for (uint32_t i = 0; i < 18; ++i) {
         adapter.queueEvent(makeButtonEvent(100 + i, 1));
     }
 
     client.tick();
 
-    TEST_ASSERT_EQUAL_UINT32(10u, static_cast<uint32_t>(adapter.emitResults.size()));
-    for (size_t i = 0; i < 8; ++i) {
+    TEST_ASSERT_EQUAL_UINT32(18u, static_cast<uint32_t>(adapter.emitResults.size()));
+    for (size_t i = 0; i < 16; ++i) {
         TEST_ASSERT_TRUE(adapter.emitResults[i]);
     }
-    TEST_ASSERT_FALSE(adapter.emitResults[8]);
-    TEST_ASSERT_FALSE(adapter.emitResults[9]);
+    TEST_ASSERT_FALSE(adapter.emitResults[16]);
+    TEST_ASSERT_FALSE(adapter.emitResults[17]);
 
     std::vector<Envelope> out;
-    TEST_ASSERT_EQUAL_UINT32(8u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(16u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 
     // Runtime после overflow продолжает работать.
     adapter.queueEvent(makeButtonEvent(200, 1));
     client.tick();
-    TEST_ASSERT_EQUAL_UINT32(9u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(17u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
 }
 
 void test_screen_client_rejects_non_event_outbound_envelope_from_adapter() {

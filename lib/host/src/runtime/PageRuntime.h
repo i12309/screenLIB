@@ -5,6 +5,7 @@
 #include <memory>
 #include <type_traits>
 
+#include "chunk/TextChunkAssembler.h"
 #include "pages/PageModel.h"
 #include "proto/machine.pb.h"
 #include "types/ScreenTypes.h"
@@ -140,6 +141,15 @@ private:
 
     bool sendShowPageByMode(uint32_t pageId, uint32_t sessionId);
     bool sendSetElementAttributeByMode(const SetElementAttribute& cmd);
+    bool sendTextChunksByMode(TextChunkKind kind,
+                              uint32_t transferId,
+                              uint32_t sessionId,
+                              uint32_t pageId,
+                              uint32_t elementId,
+                              ElementAttribute attribute,
+                              uint32_t requestId,
+                              const char* text);
+    bool sendTextChunkAbortByMode(const TextChunkAbort& abort);
     void notifyDeviceInfo(const DeviceInfo& info);
 
     // Проверка таймаута на голове очереди. Вызывается из tick.
@@ -181,6 +191,8 @@ private:
     Pending _pending[kMaxPending];
     std::size_t _pendingCount = 0;
     RequestId _nextRequestId = 1;
+    uint32_t _nextTransferId = 1;
+    screenlib::chunk::TextChunkAssembler _textAssembler;
 
     NowProvider _now = nullptr;  // nullptr → использовать default monotonic_ms
 };

@@ -11,6 +11,8 @@
 
 class UartLink : public ITransport {
 public:
+    static constexpr size_t kRxBufferSize = 512;
+
     struct Config {
         uint32_t baud = 115200;
         int8_t rxPin = -1;  // -1 = использовать дефолтные пины
@@ -21,6 +23,7 @@ public:
 
     // Инициализация с явными пинами.
     void begin(const Config& cfg) {
+        _serial.setRxBufferSize(kRxBufferSize);
         if (cfg.rxPin >= 0 && cfg.txPin >= 0) {
             _serial.begin(cfg.baud, SERIAL_8N1, cfg.rxPin, cfg.txPin);
         } else {
@@ -37,6 +40,7 @@ public:
 
     // Инициализация с дефолтными пинами.
     void begin(uint32_t baud = 115200) {
+        _serial.setRxBufferSize(kRxBufferSize);
         _serial.begin(baud);
         _ready = true;
         SCREENLIB_LOGI("screenlib.uart",

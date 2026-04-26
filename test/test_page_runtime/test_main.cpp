@@ -6,6 +6,7 @@
 #include <unity.h>
 
 #include "bridge/ScreenBridge.h"
+#include "chunk/TextChunkSender.h"
 #include "config/ScreenConfig.h"
 #include "frame/FrameCodec.h"
 #include "proto/ProtoCodec.h"
@@ -88,6 +89,13 @@ size_t decodeTxEnvelopes(const MockTransport& transport, std::vector<Envelope>& 
     return out.size();
 }
 
+bool collectEnvelope(const Envelope& env, void* userData) {
+    auto* envelopes = static_cast<std::vector<Envelope>*>(userData);
+    if (envelopes == nullptr) return false;
+    envelopes->push_back(env);
+    return true;
+}
+
 // ---------- Управляемое время ----------
 
 uint32_t g_now = 0;
@@ -153,6 +161,27 @@ Envelope makePageSnapshotEnvelope(uint32_t pageId, uint32_t sessionId) {
     env.payload.page_snapshot.elements[0].attributes[0].which_value =
         ElementAttributeValue_int_value_tag;
     env.payload.page_snapshot.elements[0].attributes[0].value.int_value = 320;
+    return env;
+}
+
+Envelope makeTextPageSnapshotEnvelope(uint32_t pageId,
+                                      uint32_t sessionId,
+                                      uint32_t elementId,
+                                      const char* text) {
+    Envelope env{};
+    env.which_payload = Envelope_page_snapshot_tag;
+    env.payload.page_snapshot.page_id = pageId;
+    env.payload.page_snapshot.session_id = sessionId;
+    env.payload.page_snapshot.elements_count = 1;
+    env.payload.page_snapshot.elements[0].element_id = elementId;
+    env.payload.page_snapshot.elements[0].attributes_count = 1;
+    env.payload.page_snapshot.elements[0].attributes[0].attribute =
+        ElementAttribute_ELEMENT_ATTRIBUTE_TEXT;
+    env.payload.page_snapshot.elements[0].attributes[0].which_value =
+        ElementAttributeValue_string_value_tag;
+    std::strncpy(env.payload.page_snapshot.elements[0].attributes[0].value.string_value,
+                 text != nullptr ? text : "",
+                 sizeof(env.payload.page_snapshot.elements[0].attributes[0].value.string_value) - 1);
     return env;
 }
 
@@ -265,6 +294,49 @@ void test_stale_snapshot_is_ignored() {
 
     TEST_ASSERT_EQUAL_INT(0, g_stats.showCalls);
     TEST_ASSERT_FALSE(ctx.runtime.pageSynced());
+}
+
+void test_page_snapshot_with_long_text_field() {
+    TestCtx ctx;
+    ctx.runtime.navigateTo<TestPage>();
+
+    constexpr uint32_t kElementId = 77;
+    const char* longText =
+        "This text is intentionally longer than the 48 byte ElementAttributeValue "
+        "string field, so it must arrive after the snapshot as text chunks.";
+
+    Envelope snap = makeTextPageSnapshotEnvelope(TestPage::kPageId, 1, kElementId, "");
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, snap, 1));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_TRUE(ctx.runtime.pageSynced());
+    TEST_ASSERT_EQUAL_STRING("", ctx.runtime.model().getString(
+                                     kElementId,
+                                     ElementAttribute_ELEMENT_ATTRIBUTE_TEXT));
+
+    std::vector<Envelope> chunks;
+    TEST_ASSERT_TRUE(screenlib::chunk::sendTextChunks(
+        &collectEnvelope,
+        &chunks,
+        TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED,
+        42,
+        1,
+        TestPage::kPageId,
+        kElementId,
+        ElementAttribute_ELEMENT_ATTRIBUTE_TEXT,
+        0,
+        longText));
+    TEST_ASSERT_TRUE(chunks.size() > 1);
+
+    uint8_t seq = 2;
+    for (const Envelope& chunk : chunks) {
+        TEST_ASSERT_TRUE(pushIncoming(ctx.transport, chunk, seq++));
+    }
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_STRING(longText, ctx.runtime.model().getString(
+                                           kElementId,
+                                           ElementAttribute_ELEMENT_ATTRIBUTE_TEXT));
 }
 
 void test_send_set_attribute_increments_pending() {
@@ -411,6 +483,7 @@ void run_all_tests() {
     RUN_TEST(test_navigate_sends_showpage_with_new_session);
     RUN_TEST(test_on_show_fires_when_snapshot_arrives);
     RUN_TEST(test_stale_snapshot_is_ignored);
+    RUN_TEST(test_page_snapshot_with_long_text_field);
     RUN_TEST(test_send_set_attribute_increments_pending);
     RUN_TEST(test_ack_removes_pending);
     RUN_TEST(test_timeout_triggers_link_down);

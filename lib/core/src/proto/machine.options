@@ -6,8 +6,8 @@
 # Синтаксис: MessageName.field_name  max_size:N  или  max_count:N
 # ============================================================
 
-# Строки: максимум 32 байта (включая \0).
-InputEvent.string_value         max_size:32
+# Chunked text payload. Full text is limited in code to 1024 bytes.
+TextChunk.chunk_data            max_size:128
 
 # DeviceInfo строки.
 DeviceInfo.fw_version           max_size:24
@@ -28,5 +28,3 @@ ElementAttributeValue.string_value  max_size:48
 ElementSnapshot.attributes          max_count:10
 PageSnapshot.elements               max_count:16
 
-# SetElementAttribute теперь также может нести строку (ELEMENT_ATTRIBUTE_TEXT).
-SetElementAttribute.string_value    max_size:48

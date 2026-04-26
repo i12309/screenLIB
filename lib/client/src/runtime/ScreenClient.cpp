@@ -2,13 +2,24 @@
 
 #include <string.h>
 
+#include "chunk/TextChunkSender.h"
+
 namespace screenlib::client {
+
+namespace {
+
+bool sendEnvelopeThroughClient(const Envelope& env, void* userData) {
+    ScreenClient* client = static_cast<ScreenClient*>(userData);
+    return client != nullptr && client->sendEnvelope(env);
+}
+
+}  // namespace
 
 ScreenClient::ScreenClient(ITransport& transport)
     : _transport(transport), _bridge(transport) {}
 
 Envelope& ScreenClient::prepareEnvelope(pb_size_t payloadTag) {
-    _scratchEnvelope = Envelope_init_zero;
+    memset(&_scratchEnvelope, 0, sizeof(_scratchEnvelope));
     _scratchEnvelope.which_payload = payloadTag;
     return _scratchEnvelope;
 }
@@ -94,16 +105,20 @@ bool ScreenClient::sendInputEventInt(uint32_t elementId, uint32_t pageId, int32_
 }
 
 bool ScreenClient::sendInputEventString(uint32_t elementId, uint32_t pageId, const char* text) {
-    Envelope& env = prepareEnvelope(Envelope_input_event_tag);
-    env.payload.input_event.element_id = elementId;
-    env.payload.input_event.page_id = pageId;
-    env.payload.input_event.which_value = InputEvent_string_value_tag;
-    copyTextSafe(
-        env.payload.input_event.value.string_value,
-        sizeof(env.payload.input_event.value.string_value),
-        text
-    );
-    return sendOutgoingEnvelope(env);
+    const uint32_t transferId = _nextTransferId++;
+    if (_nextTransferId == 0) {
+        _nextTransferId = 1;
+    }
+    return chunk::sendTextChunks(&sendEnvelopeThroughClient,
+                                 this,
+                                 TextChunkKind_TEXT_CHUNK_INPUT_EVENT,
+                                 transferId,
+                                 0,
+                                 pageId,
+                                 elementId,
+                                 ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN,
+                                 0,
+                                 text != nullptr ? text : "");
 }
 
 bool ScreenClient::sendEnvelope(const Envelope& env) {
@@ -156,7 +171,8 @@ bool ScreenClient::onUiEvent(const Envelope& env) {
     // Наружу пропускаем только пользовательские события экрана.
     // Любые другие payload от UI-адаптера игнорируем.
     if (env.which_payload != Envelope_button_event_tag &&
-        env.which_payload != Envelope_input_event_tag) {
+        env.which_payload != Envelope_input_event_tag &&
+        env.which_payload != Envelope_text_chunk_tag) {
         return false;
     }
 

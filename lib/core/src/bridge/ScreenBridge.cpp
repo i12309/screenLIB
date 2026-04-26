@@ -24,6 +24,8 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_element_attribute_state_tag: return "element_attribute_state";
         case Envelope_page_snapshot_tag: return "page_snapshot";
         case Envelope_attribute_changed_tag: return "attribute_changed";
+        case Envelope_text_chunk_tag: return "text_chunk";
+        case Envelope_text_chunk_abort_tag: return "text_chunk_abort";
         default: return "unknown";
     }
 }
@@ -51,7 +53,7 @@ bool ScreenBridge::sendEnvelope(const Envelope& env) {
 }
 
 Envelope& ScreenBridge::prepareTxEnvelope(pb_size_t payloadTag) {
-    _txEnvelope = Envelope_init_zero;
+    memset(&_txEnvelope, 0, sizeof(_txEnvelope));
     _txEnvelope.which_payload = payloadTag;
     return _txEnvelope;
 }
@@ -264,15 +266,7 @@ bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetE
             return true;
 
         case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT:
-            if (src.which_value != SetElementAttribute_string_value_tag) {
-                return false;
-            }
-            dst.which_value = SetElementAttribute_string_value_tag;
-            strncpy(dst.value.string_value,
-                    src.value.string_value,
-                    sizeof(dst.value.string_value) - 1);
-            dst.value.string_value[sizeof(dst.value.string_value) - 1] = '\0';
-            return true;
+            return false;
 
         case ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN:
         default:

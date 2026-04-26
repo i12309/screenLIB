@@ -19,6 +19,11 @@ public:
     virtual bool showPage(uint32_t pageId) = 0;
     // Применить один типизированный атрибут элемента (width/height/цвет/шрифт и т.д.).
     virtual bool setElementAttribute(const SetElementAttribute& attr) = 0;
+    virtual bool setTextAttribute(uint32_t elementId, const char* text) {
+        (void)elementId;
+        (void)text;
+        return false;
+    }
 
     // Зарегистрировать обработчик исходящих UI-событий.
     virtual void setEventSink(EventSink sink, void* userData) = 0;

@@ -12,6 +12,12 @@ PB_BIND(Envelope, Envelope, 4)
 PB_BIND(ShowPage, ShowPage, AUTO)
 
 
+PB_BIND(TextChunk, TextChunk, AUTO)
+
+
+PB_BIND(TextChunkAbort, TextChunkAbort, AUTO)
+
+
 PB_BIND(SetElementAttribute, SetElementAttribute, AUTO)
 
 
@@ -55,6 +61,10 @@ PB_BIND(RequestElementAttribute, RequestElementAttribute, AUTO)
 
 
 PB_BIND(ElementAttributeState, ElementAttributeState, AUTO)
+
+
+
+
 
 
 

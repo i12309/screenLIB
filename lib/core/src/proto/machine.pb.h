@@ -27,6 +27,20 @@ typedef enum _ElementAttribute {
     ElementAttribute_ELEMENT_ATTRIBUTE_Y = 12 /* int32 */
 } ElementAttribute;
 
+typedef enum _TextChunkKind {
+    TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE = 0,
+    TextChunkKind_TEXT_CHUNK_INPUT_EVENT = 1,
+    TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED = 2
+} TextChunkKind;
+
+typedef enum _TextChunkAbortReason {
+    TextChunkAbortReason_TEXT_CHUNK_ABORT_UNKNOWN = 0,
+    TextChunkAbortReason_TEXT_CHUNK_ABORT_TIMEOUT = 1,
+    TextChunkAbortReason_TEXT_CHUNK_ABORT_OVERFLOW = 2,
+    TextChunkAbortReason_TEXT_CHUNK_ABORT_BAD_INDEX = 3,
+    TextChunkAbortReason_TEXT_CHUNK_ABORT_METADATA_CHANGED = 4
+} TextChunkAbortReason;
+
 /* Типизированный id шрифта для text.font. */
 typedef enum _ElementFont {
     ElementFont_ELEMENT_FONT_UNKNOWN = 0,
@@ -64,6 +78,26 @@ typedef struct _ShowPage {
     uint32_t session_id;
 } ShowPage;
 
+typedef PB_BYTES_ARRAY_T(128) TextChunk_chunk_data_t;
+typedef struct _TextChunk {
+    uint32_t transfer_id;
+    uint32_t session_id;
+    uint32_t page_id;
+    uint32_t element_id;
+    ElementAttribute attribute;
+    uint32_t chunk_index;
+    uint32_t chunk_count;
+    TextChunk_chunk_data_t chunk_data;
+    uint32_t request_id;
+    TextChunkKind kind;
+} TextChunk;
+
+typedef struct _TextChunkAbort {
+    uint32_t transfer_id;
+    uint32_t request_id;
+    TextChunkAbortReason reason;
+} TextChunkAbort;
+
 /* Точечная запись одного атрибута элемента.
  request_id — для ACK-сопоставления: экран в ответ пришлёт
  AttributeChanged с in_reply_to_request = request_id и reason =
@@ -79,7 +113,6 @@ typedef struct _SetElementAttribute {
         uint32_t color_value; /* RGB888 */
         ElementFont font_value;
         bool bool_value;
-        char string_value[48];
     } value;
     uint32_t request_id;
     uint32_t session_id;
@@ -148,7 +181,6 @@ typedef struct _InputEvent {
     pb_size_t which_value;
     union {
         int32_t int_value;
-        char string_value[32]; /* макс. 64 символа (см. machine.options) */
     } value;
     uint32_t session_id;
 } InputEvent;
@@ -232,6 +264,8 @@ typedef struct _Envelope {
         ElementAttributeState element_attribute_state; /* screen -> backend */
         PageSnapshot page_snapshot; /* screen -> backend (полный слепок страницы) */
         AttributeChanged attribute_changed; /* screen -> backend (дельта + ACK команды) */
+        TextChunk text_chunk;
+        TextChunkAbort text_chunk_abort;
     } payload;
 } Envelope;
 
@@ -244,6 +278,14 @@ extern "C" {
 #define _ElementAttribute_MIN ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN
 #define _ElementAttribute_MAX ElementAttribute_ELEMENT_ATTRIBUTE_Y
 #define _ElementAttribute_ARRAYSIZE ((ElementAttribute)(ElementAttribute_ELEMENT_ATTRIBUTE_Y+1))
+
+#define _TextChunkKind_MIN TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE
+#define _TextChunkKind_MAX TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED
+#define _TextChunkKind_ARRAYSIZE ((TextChunkKind)(TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED+1))
+
+#define _TextChunkAbortReason_MIN TextChunkAbortReason_TEXT_CHUNK_ABORT_UNKNOWN
+#define _TextChunkAbortReason_MAX TextChunkAbortReason_TEXT_CHUNK_ABORT_METADATA_CHANGED
+#define _TextChunkAbortReason_ARRAYSIZE ((TextChunkAbortReason)(TextChunkAbortReason_TEXT_CHUNK_ABORT_METADATA_CHANGED+1))
 
 #define _ElementFont_MIN ElementFont_ELEMENT_FONT_UNKNOWN
 #define _ElementFont_MAX ElementFont_ELEMENT_FONT_UI_M70
@@ -258,6 +300,11 @@ extern "C" {
 #define _ButtonAction_ARRAYSIZE ((ButtonAction)(ButtonAction_REPEAT+1))
 
 
+
+#define TextChunk_attribute_ENUMTYPE ElementAttribute
+#define TextChunk_kind_ENUMTYPE TextChunkKind
+
+#define TextChunkAbort_reason_ENUMTYPE TextChunkAbortReason
 
 #define SetElementAttribute_attribute_ENUMTYPE ElementAttribute
 #define SetElementAttribute_value_font_value_ENUMTYPE ElementFont
@@ -287,6 +334,8 @@ extern "C" {
 /* Initializer values for message structs */
 #define Envelope_init_default                    {0, {ShowPage_init_default}}
 #define ShowPage_init_default                    {0, 0}
+#define TextChunk_init_default                   {0, 0, 0, 0, _ElementAttribute_MIN, 0, 0, {0, {0}}, 0, _TextChunkKind_MIN}
+#define TextChunkAbort_init_default              {0, 0, _TextChunkAbortReason_MIN}
 #define SetElementAttribute_init_default         {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
 #define ElementAttributeValue_init_default       {_ElementAttribute_MIN, 0, {0}}
 #define ElementSnapshot_init_default             {0, 0, {ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default, ElementAttributeValue_init_default}}
@@ -304,6 +353,8 @@ extern "C" {
 #define ElementAttributeState_init_default       {0, 0, 0, _ElementAttribute_MIN, 0, 0, {0}}
 #define Envelope_init_zero                       {0, {ShowPage_init_zero}}
 #define ShowPage_init_zero                       {0, 0}
+#define TextChunk_init_zero                      {0, 0, 0, 0, _ElementAttribute_MIN, 0, 0, {0, {0}}, 0, _TextChunkKind_MIN}
+#define TextChunkAbort_init_zero                 {0, 0, _TextChunkAbortReason_MIN}
 #define SetElementAttribute_init_zero            {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
 #define ElementAttributeValue_init_zero          {_ElementAttribute_MIN, 0, {0}}
 #define ElementSnapshot_init_zero                {0, 0, {ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero, ElementAttributeValue_init_zero}}
@@ -323,13 +374,25 @@ extern "C" {
 /* Field tags (for use in manual encoding/decoding) */
 #define ShowPage_page_id_tag                     1
 #define ShowPage_session_id_tag                  2
+#define TextChunk_transfer_id_tag                1
+#define TextChunk_session_id_tag                 2
+#define TextChunk_page_id_tag                    3
+#define TextChunk_element_id_tag                 4
+#define TextChunk_attribute_tag                  5
+#define TextChunk_chunk_index_tag                6
+#define TextChunk_chunk_count_tag                7
+#define TextChunk_chunk_data_tag                 8
+#define TextChunk_request_id_tag                 9
+#define TextChunk_kind_tag                       10
+#define TextChunkAbort_transfer_id_tag           1
+#define TextChunkAbort_request_id_tag            2
+#define TextChunkAbort_reason_tag                3
 #define SetElementAttribute_element_id_tag       1
 #define SetElementAttribute_attribute_tag        2
 #define SetElementAttribute_int_value_tag        3
 #define SetElementAttribute_color_value_tag      4
 #define SetElementAttribute_font_value_tag       5
 #define SetElementAttribute_bool_value_tag       8
-#define SetElementAttribute_string_value_tag     9
 #define SetElementAttribute_request_id_tag       6
 #define SetElementAttribute_session_id_tag       7
 #define ElementAttributeValue_attribute_tag      1
@@ -356,7 +419,6 @@ extern "C" {
 #define InputEvent_element_id_tag                1
 #define InputEvent_page_id_tag                   2
 #define InputEvent_int_value_tag                 3
-#define InputEvent_string_value_tag              4
 #define InputEvent_session_id_tag                5
 #define Heartbeat_uptime_ms_tag                  1
 #define DeviceInfo_protocol_version_tag          1
@@ -398,6 +460,8 @@ extern "C" {
 #define Envelope_element_attribute_state_tag     22
 #define Envelope_page_snapshot_tag               23
 #define Envelope_attribute_changed_tag           24
+#define Envelope_text_chunk_tag                  25
+#define Envelope_text_chunk_abort_tag            26
 
 /* Struct field encoding specification for nanopb */
 #define Envelope_FIELDLIST(X, a) \
@@ -414,7 +478,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,set_element_attribute,payload.set_el
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,request_element_attribute,payload.request_element_attribute),  21) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,element_attribute_state,payload.element_attribute_state),  22) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_snapshot,payload.page_snapshot),  23) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_changed),  24)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_changed),  24) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk,payload.text_chunk),  25) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk_abort,payload.text_chunk_abort),  26)
 #define Envelope_CALLBACK NULL
 #define Envelope_DEFAULT NULL
 #define Envelope_payload_show_page_MSGTYPE ShowPage
@@ -431,12 +497,35 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_
 #define Envelope_payload_element_attribute_state_MSGTYPE ElementAttributeState
 #define Envelope_payload_page_snapshot_MSGTYPE PageSnapshot
 #define Envelope_payload_attribute_changed_MSGTYPE AttributeChanged
+#define Envelope_payload_text_chunk_MSGTYPE TextChunk
+#define Envelope_payload_text_chunk_abort_MSGTYPE TextChunkAbort
 
 #define ShowPage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        2)
 #define ShowPage_CALLBACK NULL
 #define ShowPage_DEFAULT NULL
+
+#define TextChunk_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   transfer_id,       1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           3) \
+X(a, STATIC,   SINGULAR, UINT32,   element_id,        4) \
+X(a, STATIC,   SINGULAR, UENUM,    attribute,         5) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_index,       6) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_count,       7) \
+X(a, STATIC,   SINGULAR, BYTES,    chunk_data,        8) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        9) \
+X(a, STATIC,   SINGULAR, UENUM,    kind,             10)
+#define TextChunk_CALLBACK NULL
+#define TextChunk_DEFAULT NULL
+
+#define TextChunkAbort_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   transfer_id,       1) \
+X(a, STATIC,   SINGULAR, UINT32,   request_id,        2) \
+X(a, STATIC,   SINGULAR, UENUM,    reason,            3)
+#define TextChunkAbort_CALLBACK NULL
+#define TextChunkAbort_DEFAULT NULL
 
 #define SetElementAttribute_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
@@ -446,8 +535,7 @@ X(a, STATIC,   ONEOF,    UINT32,   (value,color_value,value.color_value),   4) \
 X(a, STATIC,   ONEOF,    UENUM,    (value,font_value,value.font_value),   5) \
 X(a, STATIC,   SINGULAR, UINT32,   request_id,        6) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        7) \
-X(a, STATIC,   ONEOF,    BOOL,     (value,bool_value,value.bool_value),   8) \
-X(a, STATIC,   ONEOF,    STRING,   (value,string_value,value.string_value),   9)
+X(a, STATIC,   ONEOF,    BOOL,     (value,bool_value,value.bool_value),   8)
 #define SetElementAttribute_CALLBACK NULL
 #define SetElementAttribute_DEFAULT NULL
 
@@ -499,7 +587,6 @@ X(a, STATIC,   SINGULAR, UINT32,   session_id,        4)
 X(a, STATIC,   SINGULAR, UINT32,   element_id,        1) \
 X(a, STATIC,   SINGULAR, UINT32,   page_id,           2) \
 X(a, STATIC,   ONEOF,    INT32,    (value,int_value,value.int_value),   3) \
-X(a, STATIC,   ONEOF,    STRING,   (value,string_value,value.string_value),   4) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        5)
 #define InputEvent_CALLBACK NULL
 #define InputEvent_DEFAULT NULL
@@ -565,6 +652,8 @@ X(a, STATIC,   ONEOF,    UENUM,    (value,font_value,value.font_value),   8)
 
 extern const pb_msgdesc_t Envelope_msg;
 extern const pb_msgdesc_t ShowPage_msg;
+extern const pb_msgdesc_t TextChunk_msg;
+extern const pb_msgdesc_t TextChunkAbort_msg;
 extern const pb_msgdesc_t SetElementAttribute_msg;
 extern const pb_msgdesc_t ElementAttributeValue_msg;
 extern const pb_msgdesc_t ElementSnapshot_msg;
@@ -584,6 +673,8 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Envelope_fields &Envelope_msg
 #define ShowPage_fields &ShowPage_msg
+#define TextChunk_fields &TextChunk_msg
+#define TextChunkAbort_fields &TextChunkAbort_msg
 #define SetElementAttribute_fields &SetElementAttribute_msg
 #define ElementAttributeValue_fields &ElementAttributeValue_msg
 #define ElementSnapshot_fields &ElementSnapshot_msg
@@ -611,14 +702,16 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 #define Envelope_size                            8640
 #define Heartbeat_size                           6
 #define Hello_size                               181
-#define InputEvent_size                          51
+#define InputEvent_size                          29
 #define MACHINE_PB_H_MAX_SIZE                    Envelope_size
 #define PageSnapshot_size                        8636
 #define RequestCurrentPage_size                  6
 #define RequestDeviceInfo_size                   6
 #define RequestElementAttribute_size             20
-#define SetElementAttribute_size                 69
+#define SetElementAttribute_size                 31
 #define ShowPage_size                            12
+#define TextChunkAbort_size                      14
+#define TextChunk_size                           177
 
 #ifdef __cplusplus
 } /* extern "C" */
