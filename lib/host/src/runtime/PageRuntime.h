@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <type_traits>
+#include <utility>
 
 #include "chunk/TextChunkAssembler.h"
 #include "pages/PageModel.h"
@@ -88,6 +89,14 @@ public:
         static_assert(std::is_base_of<IPage, T>::value,
                       "navigate target must inherit from screenlib::IPage");
         return swapCurrent(std::unique_ptr<IPage>(new T()), &makePage<T>, T::kPageId);
+    }
+
+    template <typename T>
+    bool navigateTo(std::unique_ptr<T> page) {
+        static_assert(std::is_base_of<IPage, T>::value,
+                      "navigate target must inherit from screenlib::IPage");
+        if (page == nullptr) return false;
+        return swapCurrent(std::unique_ptr<IPage>(std::move(page)), &makePage<T>, T::kPageId);
     }
 
     // Вернуться на предыдущую страницу (если была). Эпоха не меняется
@@ -241,6 +250,18 @@ public:
     PageRuntime* runtime() { return _runtime; }
     const PageRuntime* runtime() const { return _runtime; }
 
+    int32_t readIntProperty(uint32_t elementId, ElementAttribute attribute) const;
+    bool readBoolProperty(uint32_t elementId, ElementAttribute attribute) const;
+    uint32_t readColorProperty(uint32_t elementId, ElementAttribute attribute) const;
+    ElementFont readFontProperty(uint32_t elementId, ElementAttribute attribute) const;
+    const char* readStringProperty(uint32_t elementId, ElementAttribute attribute) const;
+
+    void writeIntProperty(uint32_t elementId, ElementAttribute attribute, int32_t value);
+    void writeBoolProperty(uint32_t elementId, ElementAttribute attribute, bool value);
+    void writeColorProperty(uint32_t elementId, ElementAttribute attribute, uint32_t value);
+    void writeFontProperty(uint32_t elementId, ElementAttribute attribute, ElementFont value);
+    void writeStringProperty(uint32_t elementId, ElementAttribute attribute, const char* value);
+
 protected:
     virtual void onShow() {}
     virtual void onClose() {}
@@ -260,8 +281,14 @@ protected:
     }
 
 private:
+    PageModel& writeTargetModel();
+    const PageModel& readTargetModel(uint32_t elementId, ElementAttribute attribute) const;
+    void writeAttributeValue(uint32_t elementId, const ElementAttributeValue& value);
+    void applyPendingAttributes();
+
     PageRuntime* _runtime = nullptr;
     bool _shown = false;
+    PageModel _pendingModel;
 };
 
 }  // namespace screenlib

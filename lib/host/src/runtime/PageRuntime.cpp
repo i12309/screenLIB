@@ -204,6 +204,155 @@ uint32_t PageRuntime::nowMs() const {
     return _now != nullptr ? _now() : default_monotonic_ms();
 }
 
+// ---------- IPage property model ----------
+
+PageModel& IPage::writeTargetModel() {
+    if (_runtime != nullptr && _runtime->model().isReady()) {
+        return _runtime->model();
+    }
+    return _pendingModel;
+}
+
+const PageModel& IPage::readTargetModel(uint32_t elementId, ElementAttribute attribute) const {
+    if (_pendingModel.has(elementId, attribute)) {
+        return _pendingModel;
+    }
+    if (_runtime != nullptr && _runtime->model().isReady()) {
+        return _runtime->model();
+    }
+    return _pendingModel;
+}
+
+int32_t IPage::readIntProperty(uint32_t elementId, ElementAttribute attribute) const {
+    return readTargetModel(elementId, attribute).getInt(elementId, attribute);
+}
+
+bool IPage::readBoolProperty(uint32_t elementId, ElementAttribute attribute) const {
+    return readTargetModel(elementId, attribute).getBool(elementId, attribute);
+}
+
+uint32_t IPage::readColorProperty(uint32_t elementId, ElementAttribute attribute) const {
+    return readTargetModel(elementId, attribute).getColor(elementId, attribute);
+}
+
+ElementFont IPage::readFontProperty(uint32_t elementId, ElementAttribute attribute) const {
+    return readTargetModel(elementId, attribute).getFont(elementId, attribute);
+}
+
+const char* IPage::readStringProperty(uint32_t elementId, ElementAttribute attribute) const {
+    return readTargetModel(elementId, attribute).getString(elementId, attribute);
+}
+
+void IPage::writeAttributeValue(uint32_t elementId, const ElementAttributeValue& value) {
+    PageModel& target = writeTargetModel();
+    switch (value.which_value) {
+        case ElementAttributeValue_int_value_tag:
+            target.setInt(elementId, value.attribute, value.value.int_value);
+            break;
+        case ElementAttributeValue_bool_value_tag:
+            target.setBool(elementId, value.attribute, value.value.bool_value);
+            break;
+        case ElementAttributeValue_color_value_tag:
+            target.setColor(elementId, value.attribute, value.value.color_value);
+            break;
+        case ElementAttributeValue_font_value_tag:
+            target.setFont(elementId, value.attribute, value.value.font_value);
+            break;
+        case ElementAttributeValue_string_value_tag:
+            target.setString(elementId, value.attribute, value.value.string_value);
+            break;
+        default:
+            return;
+    }
+
+    if (_runtime != nullptr && _runtime->model().isReady()) {
+        _runtime->sendSetAttribute(elementId, value);
+    }
+}
+
+void IPage::writeIntProperty(uint32_t elementId, ElementAttribute attribute, int32_t value) {
+    ElementAttributeValue eav{};
+    eav.attribute = attribute;
+    eav.which_value = ElementAttributeValue_int_value_tag;
+    eav.value.int_value = value;
+    writeAttributeValue(elementId, eav);
+}
+
+void IPage::writeBoolProperty(uint32_t elementId, ElementAttribute attribute, bool value) {
+    ElementAttributeValue eav{};
+    eav.attribute = attribute;
+    eav.which_value = ElementAttributeValue_bool_value_tag;
+    eav.value.bool_value = value;
+    writeAttributeValue(elementId, eav);
+}
+
+void IPage::writeColorProperty(uint32_t elementId, ElementAttribute attribute, uint32_t value) {
+    ElementAttributeValue eav{};
+    eav.attribute = attribute;
+    eav.which_value = ElementAttributeValue_color_value_tag;
+    eav.value.color_value = value & 0x00FFFFFFu;
+    writeAttributeValue(elementId, eav);
+}
+
+void IPage::writeFontProperty(uint32_t elementId, ElementAttribute attribute, ElementFont value) {
+    ElementAttributeValue eav{};
+    eav.attribute = attribute;
+    eav.which_value = ElementAttributeValue_font_value_tag;
+    eav.value.font_value = value;
+    writeAttributeValue(elementId, eav);
+}
+
+void IPage::writeStringProperty(uint32_t elementId, ElementAttribute attribute, const char* value) {
+    ElementAttributeValue eav{};
+    eav.attribute = attribute;
+    eav.which_value = ElementAttributeValue_string_value_tag;
+    const char* src = value != nullptr ? value : "";
+    std::strncpy(eav.value.string_value, src, sizeof(eav.value.string_value) - 1);
+    eav.value.string_value[sizeof(eav.value.string_value) - 1] = '\0';
+    writeAttributeValue(elementId, eav);
+}
+
+namespace {
+
+void applyPendingSlot(uint32_t elementId,
+                      ElementAttribute attribute,
+                      const AttributeValue& value,
+                      void* user) {
+    IPage* page = static_cast<IPage*>(user);
+    if (page == nullptr) return;
+
+    switch (value.type) {
+        case AttributeValue::Type::Int:
+            page->writeIntProperty(elementId, attribute, value.i);
+            break;
+        case AttributeValue::Type::Bool:
+            page->writeBoolProperty(elementId, attribute, value.b);
+            break;
+        case AttributeValue::Type::Color:
+            page->writeColorProperty(elementId, attribute, value.u);
+            break;
+        case AttributeValue::Type::Font:
+            page->writeFontProperty(elementId, attribute, value.font);
+            break;
+        case AttributeValue::Type::String:
+            page->writeStringProperty(elementId, attribute, value.s);
+            break;
+        case AttributeValue::Type::None:
+        default:
+            break;
+    }
+}
+
+}  // namespace
+
+void IPage::applyPendingAttributes() {
+    if (_runtime == nullptr || !_runtime->model().isReady()) {
+        return;
+    }
+    _pendingModel.forEachSlot(&applyPendingSlot, this);
+    _pendingModel.clear();
+}
+
 // ---------- sendSetAttribute ----------
 
 RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttributeValue& v) {
@@ -543,6 +692,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             _navState = RuntimeState::PageReady;
             _snapshotTimeoutLogged = false;
             if (_current != nullptr && !_current->_shown) {
+                _current->applyPendingAttributes();
                 _current->onShow();
                 _current->_shown = true;
             }

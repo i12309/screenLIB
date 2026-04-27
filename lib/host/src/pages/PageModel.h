@@ -87,6 +87,12 @@ public:
     // Проверить, существует ли слот под (element, attribute).
     bool has(uint32_t elementId, ElementAttribute a) const;
 
+    using SlotVisitor = void (*)(uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 const AttributeValue& value,
+                                 void* user);
+    void forEachSlot(SlotVisitor visitor, void* user) const;
+
     // --- Write API (локальная оптимистичная запись) ---
 
     void setInt   (uint32_t elementId, ElementAttribute a, int32_t v);

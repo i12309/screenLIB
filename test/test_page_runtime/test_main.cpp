@@ -9,6 +9,7 @@
 #include "chunk/TextChunkSender.h"
 #include "config/ScreenConfig.h"
 #include "frame/FrameCodec.h"
+#include "pages/Element.h"
 #include "proto/ProtoCodec.h"
 #include "runtime/PageRuntime.h"
 
@@ -136,6 +137,16 @@ public:
 
 protected:
     void onShow() override { g_stats.otherShowCalls++; }
+};
+
+class PropertyPage : public screenlib::IPage {
+public:
+    static constexpr uint32_t kPageId = 300;
+    static constexpr uint32_t kButtonId = 77;
+
+    screenlib::Button button{this, kButtonId};
+
+    uint32_t pageId() const override { return kPageId; }
 };
 
 // ---------- Link listener ----------
@@ -561,6 +572,36 @@ void test_navigate_drains_pending_queue() {
     TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
 }
 
+void test_property_write_before_runtime_uses_pending_model() {
+    PropertyPage page;
+
+    page.button.text = "preset";
+
+    TEST_ASSERT_EQUAL_STRING("preset", static_cast<const char*>(page.button.text));
+}
+
+void test_pending_property_applies_after_snapshot_and_sends_set_attribute() {
+    TestCtx ctx;
+    std::unique_ptr<PropertyPage> page(new PropertyPage());
+    page->button.text = "preset";
+
+    TEST_ASSERT_TRUE(ctx.runtime.navigateTo<PropertyPage>(std::move(page)));
+    ctx.transport.clearTx();
+
+    Envelope snap = makeTextPageSnapshotEnvelope(
+        PropertyPage::kPageId, 1, PropertyPage::kButtonId, "snapshot");
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, snap, 1));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_STRING("preset", ctx.runtime.model().getString(
+                                           PropertyPage::kButtonId,
+                                           ElementAttribute_ELEMENT_ATTRIBUTE_TEXT));
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_TRUE(decodeTxEnvelopes(ctx.transport, out) >= 1);
+    TEST_ASSERT_EQUAL_UINT32(Envelope_text_chunk_tag, out[0].which_payload);
+}
+
 }  // namespace
 
 void run_all_tests() {
@@ -579,6 +620,8 @@ void run_all_tests() {
     RUN_TEST(test_stale_button_event_is_ignored);
     RUN_TEST(test_second_navigate_calls_onClose_and_increments_session);
     RUN_TEST(test_navigate_drains_pending_queue);
+    RUN_TEST(test_property_write_before_runtime_uses_pending_model);
+    RUN_TEST(test_pending_property_applies_after_snapshot_and_sends_set_attribute);
 }
 
 #ifdef ARDUINO

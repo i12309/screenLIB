@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -69,6 +70,7 @@ public:
     static constexpr std::size_t kMaxStorage = 32;
 
     Signal() = default;
+    ~Signal() { reset(); }
 
     Signal(const Signal&) = delete;
     Signal& operator=(const Signal&) = delete;
@@ -83,17 +85,27 @@ public:
                       "Signal capture is too large; enlarge kMaxStorage or reduce capture");
         static_assert(alignof(Fn) <= alignof(std::max_align_t),
                       "Signal capture alignment is unsupported");
-        static_assert(std::is_trivially_destructible_v<Fn>,
-                      "Signal callable must be trivially destructible (no std::string etc. in capture)");
+        if constexpr (is_std_function<Fn>::value) {
+            if (!f) {
+                reset();
+                return *this;
+            }
+        }
 
+        reset();
         ::new (static_cast<void*>(_storage)) Fn(std::forward<F>(f));
         _invoke = &invokeImpl<Fn>;
+        _destroy = &destroyImpl<Fn>;
         return *this;
     }
 
     // Сбросить обработчик.
     void reset() {
+        if (_destroy != nullptr) {
+            _destroy(static_cast<void*>(_storage));
+        }
         _invoke = nullptr;
+        _destroy = nullptr;
     }
 
     // Установлен ли обработчик.
@@ -113,10 +125,23 @@ private:
         (*static_cast<Fn*>(storage))(std::forward<Args>(args)...);
     }
 
+    template <typename Fn>
+    static void destroyImpl(void* storage) {
+        static_cast<Fn*>(storage)->~Fn();
+    }
+
+    template <typename>
+    struct is_std_function : std::false_type {};
+
+    template <typename R, typename... FnArgs>
+    struct is_std_function<std::function<R(FnArgs...)>> : std::true_type {};
+
     using InvokePtr = void (*)(void*, Args...);
+    using DestroyPtr = void (*)(void*);
 
     alignas(std::max_align_t) unsigned char _storage[kMaxStorage] = {};
     InvokePtr _invoke = nullptr;
+    DestroyPtr _destroy = nullptr;
 };
 
 // ============================================================
@@ -140,16 +165,13 @@ public:
     Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator int32_t() const {
-        return _page->runtime()->model().getInt(_elementId, A);
+        return _page != nullptr ? _page->readIntProperty(_elementId, A) : 0;
     }
 
     Property& operator=(int32_t v) {
-        _page->runtime()->model().setInt(_elementId, A, v);
-        ElementAttributeValue eav{};
-        eav.attribute = A;
-        eav.which_value = ElementAttributeValue_int_value_tag;
-        eav.value.int_value = v;
-        _page->runtime()->sendSetAttribute(_elementId, eav);
+        if (_page != nullptr) {
+            _page->writeIntProperty(_elementId, A, v);
+        }
         return *this;
     }
 
@@ -165,16 +187,13 @@ public:
     Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator bool() const {
-        return _page->runtime()->model().getBool(_elementId, A);
+        return _page != nullptr ? _page->readBoolProperty(_elementId, A) : false;
     }
 
     Property& operator=(bool v) {
-        _page->runtime()->model().setBool(_elementId, A, v);
-        ElementAttributeValue eav{};
-        eav.attribute = A;
-        eav.which_value = ElementAttributeValue_bool_value_tag;
-        eav.value.bool_value = v;
-        _page->runtime()->sendSetAttribute(_elementId, eav);
+        if (_page != nullptr) {
+            _page->writeBoolProperty(_elementId, A, v);
+        }
         return *this;
     }
 
@@ -190,16 +209,13 @@ public:
     Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator uint32_t() const {
-        return _page->runtime()->model().getColor(_elementId, A);
+        return _page != nullptr ? _page->readColorProperty(_elementId, A) : 0;
     }
 
     Property& operator=(uint32_t v) {
-        _page->runtime()->model().setColor(_elementId, A, v);
-        ElementAttributeValue eav{};
-        eav.attribute = A;
-        eav.which_value = ElementAttributeValue_color_value_tag;
-        eav.value.color_value = v & 0x00FFFFFFu;
-        _page->runtime()->sendSetAttribute(_elementId, eav);
+        if (_page != nullptr) {
+            _page->writeColorProperty(_elementId, A, v);
+        }
         return *this;
     }
 
@@ -215,16 +231,15 @@ public:
     Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator ElementFont() const {
-        return _page->runtime()->model().getFont(_elementId, A);
+        return _page != nullptr
+            ? _page->readFontProperty(_elementId, A)
+            : ElementFont_ELEMENT_FONT_UNKNOWN;
     }
 
     Property& operator=(ElementFont v) {
-        _page->runtime()->model().setFont(_elementId, A, v);
-        ElementAttributeValue eav{};
-        eav.attribute = A;
-        eav.which_value = ElementAttributeValue_font_value_tag;
-        eav.value.font_value = v;
-        _page->runtime()->sendSetAttribute(_elementId, eav);
+        if (_page != nullptr) {
+            _page->writeFontProperty(_elementId, A, v);
+        }
         return *this;
     }
 
@@ -240,19 +255,13 @@ public:
     Property(IPage* page, uint32_t elementId) : _page(page), _elementId(elementId) {}
 
     operator const char*() const {
-        return _page->runtime()->model().getString(_elementId, A);
+        return _page != nullptr ? _page->readStringProperty(_elementId, A) : nullptr;
     }
 
     Property& operator=(const char* v) {
-        _page->runtime()->model().setString(_elementId, A, v);
-        ElementAttributeValue eav{};
-        eav.attribute = A;
-        eav.which_value = ElementAttributeValue_string_value_tag;
-        // Защита от nullptr + обрезка по размеру поля nanopb.
-        const char* src = (v != nullptr) ? v : "";
-        std::strncpy(eav.value.string_value, src, sizeof(eav.value.string_value) - 1);
-        eav.value.string_value[sizeof(eav.value.string_value) - 1] = '\0';
-        _page->runtime()->sendSetAttribute(_elementId, eav);
+        if (_page != nullptr) {
+            _page->writeStringProperty(_elementId, A, v);
+        }
         return *this;
     }
 

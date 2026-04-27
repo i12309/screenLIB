@@ -156,6 +156,13 @@ bool PageModel::has(uint32_t elementId, ElementAttribute a) const {
     return findSlot(elementId, a) != nullptr;
 }
 
+void PageModel::forEachSlot(SlotVisitor visitor, void* user) const {
+    if (visitor == nullptr) return;
+    for (std::size_t i = 0; i < _slotCount; ++i) {
+        visitor(_slots[i].elementId, _slots[i].attribute, _slots[i].value, user);
+    }
+}
+
 // ---------- Write ----------
 
 void PageModel::setInt(uint32_t elementId, ElementAttribute a, int32_t v) {
