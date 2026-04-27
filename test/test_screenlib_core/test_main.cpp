@@ -147,6 +147,8 @@ void test_screen_bridge_attribute_helpers_encode_envelopes() {
     setAttr.attribute = ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH;
     setAttr.which_value = SetElementAttribute_int_value_tag;
     setAttr.value.int_value = 120;
+    setAttr.request_id = 700;
+    setAttr.session_id = 8;
     TEST_ASSERT_TRUE(bridge.setElementAttribute(setAttr));
 
     TEST_ASSERT_TRUE(bridge.requestElementAttribute(
@@ -168,6 +170,8 @@ void test_screen_bridge_attribute_helpers_encode_envelopes() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_set_element_attribute_tag, out[0].which_payload);
     TEST_ASSERT_EQUAL_UINT32(41, out[0].payload.set_element_attribute.element_id);
     TEST_ASSERT_EQUAL_UINT32(120, static_cast<uint32_t>(out[0].payload.set_element_attribute.value.int_value));
+    TEST_ASSERT_EQUAL_UINT32(700, out[0].payload.set_element_attribute.request_id);
+    TEST_ASSERT_EQUAL_UINT32(8, out[0].payload.set_element_attribute.session_id);
 
     TEST_ASSERT_EQUAL_UINT32(Envelope_request_element_attribute_tag, out[1].which_payload);
     TEST_ASSERT_EQUAL_UINT32(701, out[1].payload.request_element_attribute.request_id);
