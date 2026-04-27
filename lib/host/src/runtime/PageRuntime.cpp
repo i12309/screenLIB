@@ -66,6 +66,26 @@ bool sendEnvelopeToBridge(const Envelope& env, void* userData) {
     return bridge != nullptr && bridge->sendEnvelope(env);
 }
 
+const char* attributeName(ElementAttribute attribute) {
+    switch (attribute) {
+        case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH: return "POSITION_WIDTH";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_HEIGHT: return "POSITION_HEIGHT";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BACKGROUND_COLOR: return "BACKGROUND_COLOR";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_COLOR: return "BORDER_COLOR";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH: return "BORDER_WIDTH";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_COLOR: return "TEXT_COLOR";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT_FONT: return "TEXT_FONT";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_VISIBLE: return "VISIBLE";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_TEXT: return "TEXT";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_VALUE: return "VALUE";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_X: return "X";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_Y: return "Y";
+        case ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN:
+        default:
+            return "UNKNOWN";
+    }
+}
+
 }  // namespace
 
 // ---------- Lifecycle ----------
@@ -98,6 +118,7 @@ void PageRuntime::tick() {
         _current->onTick();
     }
 
+    flushQueuedSends();
     checkSnapshotTimeout();
     checkPendingTimeouts();
 }
@@ -137,6 +158,8 @@ bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFacto
     //    Бэк-оптимист: новая страница начнётся с PageSnapshot'а, который
     //    перезапишет состояние; висящие ACK устаревают по session_id.
     _pendingCount = 0;
+    _queuedHead = 0;
+    _queuedCount = 0;
     _textAssembler.reset();
     _snapshotRequestedAtMs = nowMs();
     _snapshotTimeoutLogged = false;
@@ -196,6 +219,16 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
         _nextRequestId = 1;  // wrap, 0 зарезервирован
     }
 
+    if (_pendingCount >= kMaxInFlight) {
+        if (!enqueueSetAttribute(reqId, elementId, v)) {
+            SCREENLIB_LOGW(kLogTag, "sendSetAttribute: queue overflow (%u), linkDown",
+                           static_cast<unsigned>(_queuedCount));
+            setLinkUp(false);
+            return kInvalidRequestId;
+        }
+        return reqId;
+    }
+
     bool sent = false;
     if (v.which_value == ElementAttributeValue_string_value_tag) {
         const uint32_t transferId = _nextTransferId++;
@@ -241,6 +274,27 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
 }
 
 // ---------- Очередь и таймауты ----------
+
+bool PageRuntime::enqueueSetAttribute(RequestId reqId, uint32_t elementId, const ElementAttributeValue& v) {
+    if (_queuedCount >= kMaxQueued) {
+        return false;
+    }
+    const std::size_t index = (_queuedHead + _queuedCount) % kMaxQueued;
+    _queued[index].id = reqId;
+    _queued[index].elementId = elementId;
+    _queued[index].value = v;
+    ++_queuedCount;
+    return true;
+}
+
+void PageRuntime::flushQueuedSends() {
+    while (_queuedCount > 0 && _pendingCount < kMaxInFlight) {
+        Queued queued = _queued[_queuedHead];
+        _queuedHead = (_queuedHead + 1) % kMaxQueued;
+        --_queuedCount;
+        sendSetAttribute(queued.elementId, queued.value);
+    }
+}
 
 bool PageRuntime::removePending(RequestId id) {
     for (std::size_t i = 0; i < _pendingCount; ++i) {
@@ -306,13 +360,28 @@ void PageRuntime::checkPendingTimeouts() {
         }
     }
     if (now - minSent > kLinkTimeoutMs) {
-        const Pending& oldest = _pending[0];
+        const std::size_t timedOutCount = _pendingCount;
         SCREENLIB_LOGW(kLogTag,
                        "pending timeout page=%u session=%u pending=%u after %u ms, linkDown",
-                       static_cast<unsigned>(oldest.pageId),
-                       static_cast<unsigned>(oldest.sessionId),
-                       static_cast<unsigned>(_pendingCount),
+                       static_cast<unsigned>(_pending[0].pageId),
+                       static_cast<unsigned>(_pending[0].sessionId),
+                       static_cast<unsigned>(timedOutCount),
                        static_cast<unsigned>(now - minSent));
+        for (std::size_t i = 0; i < timedOutCount; ++i) {
+            const Pending& p = _pending[i];
+            SCREENLIB_LOGW(kLogTag,
+                           "pending without ACK: request=%u page=%u session=%u element=%u attr=%s(%u) age=%u ms",
+                           static_cast<unsigned>(p.id),
+                           static_cast<unsigned>(p.pageId),
+                           static_cast<unsigned>(p.sessionId),
+                           static_cast<unsigned>(p.elementId),
+                           attributeName(p.attribute),
+                           static_cast<unsigned>(p.attribute),
+                           static_cast<unsigned>(now - p.sentAtMs));
+        }
+        _pendingCount = 0;
+        _queuedHead = 0;
+        _queuedCount = 0;
         setLinkUp(false);
         _navState = RuntimeState::LinkDown;
     }
@@ -481,6 +550,14 @@ void PageRuntime::onEnvelope(const Envelope& env) {
         }
         case Envelope_attribute_changed_tag: {
             const AttributeChanged& msg = env.payload.attribute_changed;
+            SCREENLIB_LOGI(kLogTag,
+                           "RX AttributeChanged page=%u session=%u element=%u reply=%u has_value=%d reason=%d",
+                           static_cast<unsigned>(msg.page_id),
+                           static_cast<unsigned>(msg.session_id),
+                           static_cast<unsigned>(msg.element_id),
+                           static_cast<unsigned>(msg.in_reply_to_request),
+                           msg.has_value ? 1 : 0,
+                           static_cast<int>(msg.reason));
             if (msg.in_reply_to_request != kInvalidRequestId) {
                 removePendingForAck(msg.in_reply_to_request, msg.page_id, msg.session_id);
             }

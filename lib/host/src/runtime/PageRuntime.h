@@ -56,6 +56,8 @@ public:
 
     // Максимум отправленных команд без ACK. При превышении — linkDown.
     static constexpr std::size_t kMaxPending = 64;
+    static constexpr std::size_t kMaxInFlight = 4;
+    static constexpr std::size_t kMaxQueued = 64;
     // Таймаут ожидания ACK на самую старую команду в очереди.
     static constexpr uint32_t kLinkTimeoutMs = 2000;
     static constexpr uint32_t kSnapshotTimeoutMs = 2000;
@@ -95,8 +97,8 @@ public:
     // --- State ---
 
     bool linkUp() const { return _linkUp; }
-    bool pageSynced() const { return _model.isReady() && _pendingCount == 0; }
-    std::size_t pendingCommands() const { return _pendingCount; }
+    bool pageSynced() const { return _model.isReady() && _pendingCount == 0 && _queuedCount == 0; }
+    std::size_t pendingCommands() const { return _pendingCount + _queuedCount; }
     RuntimeState runtimeState() const { return _navState; }
 
     void setLinkListener(LinkListener l, void* user) {
@@ -160,6 +162,8 @@ private:
                               const char* text);
     bool sendTextChunkAbortByMode(const TextChunkAbort& abort);
     void notifyDeviceInfo(const DeviceInfo& info);
+    bool enqueueSetAttribute(RequestId reqId, uint32_t elementId, const ElementAttributeValue& v);
+    void flushQueuedSends();
 
     // Проверка таймаута на голове очереди. Вызывается из tick.
     void checkPendingTimeouts();
@@ -206,6 +210,14 @@ private:
     };
     Pending _pending[kMaxPending];
     std::size_t _pendingCount = 0;
+    struct Queued {
+        RequestId id = kInvalidRequestId;
+        uint32_t elementId = 0;
+        ElementAttributeValue value = ElementAttributeValue_init_zero;
+    };
+    Queued _queued[kMaxQueued];
+    std::size_t _queuedHead = 0;
+    std::size_t _queuedCount = 0;
     RequestId _nextRequestId = 1;
     uint32_t _nextTransferId = 1;
     screenlib::chunk::TextChunkAssembler _textAssembler;

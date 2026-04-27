@@ -213,6 +213,8 @@ void ScreenBridge::dispatchEnvelope(const Envelope& env) const {
 bool ScreenBridge::sanitizeElementAttribute(const SetElementAttribute& src, SetElementAttribute& dst) {
     dst = SetElementAttribute_init_zero;
     dst.element_id = src.element_id;
+    dst.request_id = src.request_id;
+    dst.session_id = src.session_id;
 
     if (src.attribute < _ElementAttribute_MIN || src.attribute > _ElementAttribute_MAX) {
         return false;

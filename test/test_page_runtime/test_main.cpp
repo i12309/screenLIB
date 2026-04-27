@@ -481,6 +481,11 @@ void test_timeout_triggers_link_down() {
     TEST_ASSERT_FALSE(ctx.runtime.linkUp());
     TEST_ASSERT_EQUAL_INT(1, g_link.calls);
     TEST_ASSERT_FALSE(g_link.lastUp);
+    TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+
+    ctx.runtime.tick();
+    TEST_ASSERT_EQUAL_INT(1, g_link.calls);
+    TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
 }
 
 void test_overflow_triggers_link_down() {
@@ -488,8 +493,8 @@ void test_overflow_triggers_link_down() {
     ctx.runtime.navigateTo<TestPage>();
     ctx.transport.clearTx();
 
-    // Забиваем очередь до предела.
-    for (std::size_t i = 0; i < screenlib::PageRuntime::kMaxPending; ++i) {
+    // Забиваем in-flight окно и локальную очередь до предела.
+    for (std::size_t i = 0; i < screenlib::PageRuntime::kMaxInFlight + screenlib::PageRuntime::kMaxQueued; ++i) {
         const auto id = ctx.runtime.sendSetAttribute(
             1, makeIntValue(ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH,
                             static_cast<int32_t>(i)));
