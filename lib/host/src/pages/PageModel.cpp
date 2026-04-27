@@ -62,7 +62,7 @@ void PageModel::applySnapshot(const PageSnapshot& snap) {
 
 void PageModel::applyRemoteChange(const AttributeChanged& msg) {
     if (msg.page_id != _pageId || msg.session_id != _sessionId) {
-        SCREENLIB_LOGW(kLogTag,
+        SCREENLIB_LOGD(kLogTag,
                        "stale AttributeChanged ignored: page=%u/%u session=%u/%u element=%u",
                        static_cast<unsigned>(msg.page_id),
                        static_cast<unsigned>(_pageId),

@@ -108,6 +108,7 @@ struct TestPageStats {
     int closeCalls = 0;
     int tickCalls = 0;
     int buttonCalls = 0;
+    int otherShowCalls = 0;
     uint32_t lastButtonElementId = 0;
     ButtonAction lastButtonAction = ButtonAction_CLICK;
 } g_stats;
@@ -132,6 +133,9 @@ class OtherPage : public screenlib::IPage {
 public:
     static constexpr uint32_t kPageId = 200;
     uint32_t pageId() const override { return kPageId; }
+
+protected:
+    void onShow() override { g_stats.otherShowCalls++; }
 };
 
 // ---------- Link listener ----------
@@ -294,6 +298,36 @@ void test_stale_snapshot_is_ignored() {
 
     TEST_ASSERT_EQUAL_INT(0, g_stats.showCalls);
     TEST_ASSERT_FALSE(ctx.runtime.pageSynced());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::WaitingSnapshot),
+                          static_cast<int>(ctx.runtime.runtimeState()));
+}
+
+void test_stale_snapshot_after_new_navigation_keeps_waiting_for_current_page() {
+    TestCtx ctx;
+    TEST_ASSERT_TRUE(ctx.runtime.navigateTo<TestPage>());   // page A, session=1
+    TEST_ASSERT_TRUE(ctx.runtime.navigateTo<OtherPage>());  // page B, session=2
+
+    Envelope staleA = makePageSnapshotEnvelope(TestPage::kPageId, 1);
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, staleA, 1));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_INT(0, g_stats.showCalls);
+    TEST_ASSERT_EQUAL_INT(0, g_stats.otherShowCalls);
+    TEST_ASSERT_EQUAL_UINT32(OtherPage::kPageId, ctx.runtime.currentPageId());
+    TEST_ASSERT_EQUAL_UINT32(2u, ctx.runtime.currentSessionId());
+    TEST_ASSERT_FALSE(ctx.runtime.pageSynced());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::WaitingSnapshot),
+                          static_cast<int>(ctx.runtime.runtimeState()));
+
+    Envelope validB = makePageSnapshotEnvelope(OtherPage::kPageId, 2);
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, validB, 2));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_INT(0, g_stats.showCalls);
+    TEST_ASSERT_EQUAL_INT(1, g_stats.otherShowCalls);
+    TEST_ASSERT_TRUE(ctx.runtime.pageSynced());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::PageReady),
+                          static_cast<int>(ctx.runtime.runtimeState()));
 }
 
 void test_page_snapshot_with_long_text_field() {
@@ -380,9 +414,54 @@ void test_ack_removes_pending() {
         1, ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH));
 }
 
+void test_stale_ack_does_not_remove_current_pending_with_same_request_id() {
+    TestCtx ctx;
+    ctx.runtime.navigateTo<TestPage>();
+    ctx.transport.clearTx();
+
+    const auto reqId = ctx.runtime.sendSetAttribute(
+        1, makeIntValue(ElementAttribute_ELEMENT_ATTRIBUTE_POSITION_WIDTH, 500));
+    TEST_ASSERT_EQUAL_UINT32(1u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+
+    Envelope staleAck = makeAttributeChangedAck(TestPage::kPageId, /*session=*/999, 1, reqId, 500);
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, staleAck, 3));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_UINT32(1u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+
+    Envelope validAck = makeAttributeChangedAck(TestPage::kPageId, /*session=*/1, 1, reqId, 500);
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, validAck, 4));
+    ctx.runtime.tick();
+
+    TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+}
+
+void test_snapshot_timeout_is_separate_from_pending_timeout() {
+    TestCtx ctx;
+    g_now = 1000;
+    ctx.runtime.navigateTo<TestPage>();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::WaitingSnapshot),
+                          static_cast<int>(ctx.runtime.runtimeState()));
+
+    g_now = 1000 + screenlib::PageRuntime::kSnapshotTimeoutMs;
+    ctx.runtime.tick();
+    TEST_ASSERT_TRUE(ctx.runtime.linkUp());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::WaitingSnapshot),
+                          static_cast<int>(ctx.runtime.runtimeState()));
+
+    g_now = 1000 + screenlib::PageRuntime::kSnapshotTimeoutMs + 1;
+    ctx.runtime.tick();
+    TEST_ASSERT_FALSE(ctx.runtime.linkUp());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(screenlib::PageRuntime::RuntimeState::LinkDown),
+                          static_cast<int>(ctx.runtime.runtimeState()));
+    TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+}
+
 void test_timeout_triggers_link_down() {
     TestCtx ctx;
     ctx.runtime.navigateTo<TestPage>();
+    pushIncoming(ctx.transport, makePageSnapshotEnvelope(TestPage::kPageId, 1), 1);
+    ctx.runtime.tick();
     ctx.transport.clearTx();
 
     g_now = 1000;
@@ -483,9 +562,12 @@ void run_all_tests() {
     RUN_TEST(test_navigate_sends_showpage_with_new_session);
     RUN_TEST(test_on_show_fires_when_snapshot_arrives);
     RUN_TEST(test_stale_snapshot_is_ignored);
+    RUN_TEST(test_stale_snapshot_after_new_navigation_keeps_waiting_for_current_page);
     RUN_TEST(test_page_snapshot_with_long_text_field);
     RUN_TEST(test_send_set_attribute_increments_pending);
     RUN_TEST(test_ack_removes_pending);
+    RUN_TEST(test_stale_ack_does_not_remove_current_pending_with_same_request_id);
+    RUN_TEST(test_snapshot_timeout_is_separate_from_pending_timeout);
     RUN_TEST(test_timeout_triggers_link_down);
     RUN_TEST(test_overflow_triggers_link_down);
     RUN_TEST(test_button_event_dispatches_to_page);

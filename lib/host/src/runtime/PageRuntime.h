@@ -45,12 +45,20 @@ public:
     using DeviceInfoListener = void (*)(const DeviceInfo& info, void* user);
     using PageFactory  = std::unique_ptr<IPage> (*)();
 
+    enum class RuntimeState : uint8_t {
+        NoPage,
+        WaitingSnapshot,
+        PageReady,
+        LinkDown
+    };
+
     // --- Тайминги/лимиты ---
 
     // Максимум отправленных команд без ACK. При превышении — linkDown.
     static constexpr std::size_t kMaxPending = 64;
     // Таймаут ожидания ACK на самую старую команду в очереди.
     static constexpr uint32_t kLinkTimeoutMs = 2000;
+    static constexpr uint32_t kSnapshotTimeoutMs = 2000;
 
     PageRuntime() = default;
     PageRuntime(const PageRuntime&) = delete;
@@ -89,6 +97,7 @@ public:
     bool linkUp() const { return _linkUp; }
     bool pageSynced() const { return _model.isReady() && _pendingCount == 0; }
     std::size_t pendingCommands() const { return _pendingCount; }
+    RuntimeState runtimeState() const { return _navState; }
 
     void setLinkListener(LinkListener l, void* user) {
         _linkListener = l;
@@ -154,12 +163,14 @@ private:
 
     // Проверка таймаута на голове очереди. Вызывается из tick.
     void checkPendingTimeouts();
+    void checkSnapshotTimeout();
 
     // Пометить линк как up/down, позвать listener при изменении.
     void setLinkUp(bool up);
 
     // Удалить pending по request_id (линейный поиск). true если нашёл.
     bool removePending(RequestId id);
+    bool removePendingForAck(RequestId id, uint32_t pageId, uint32_t sessionId);
 
     // Получить текущее время (через _now или default).
     uint32_t nowMs() const;
@@ -175,6 +186,9 @@ private:
     PageFactory _currentFactory = nullptr;
     PageFactory _previousFactory = nullptr;
     uint32_t _sessionCounter = 0;  // монотонно растёт, эпоха = _sessionCounter
+    RuntimeState _navState = RuntimeState::NoPage;
+    uint32_t _snapshotRequestedAtMs = 0;
+    bool _snapshotTimeoutLogged = false;
 
     bool _linkUp = true;
     LinkListener _linkListener = nullptr;
@@ -187,6 +201,8 @@ private:
         uint32_t elementId = 0;
         ElementAttribute attribute = ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN;
         uint32_t sentAtMs = 0;
+        uint32_t pageId = 0;
+        uint32_t sessionId = 0;
     };
     Pending _pending[kMaxPending];
     std::size_t _pendingCount = 0;

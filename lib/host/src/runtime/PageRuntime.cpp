@@ -98,6 +98,7 @@ void PageRuntime::tick() {
         _current->onTick();
     }
 
+    checkSnapshotTimeout();
     checkPendingTimeouts();
 }
 
@@ -136,6 +137,10 @@ bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFacto
     //    Бэк-оптимист: новая страница начнётся с PageSnapshot'а, который
     //    перезапишет состояние; висящие ACK устаревают по session_id.
     _pendingCount = 0;
+    _textAssembler.reset();
+    _snapshotRequestedAtMs = nowMs();
+    _snapshotTimeoutLogged = false;
+    _navState = RuntimeState::WaitingSnapshot;
 
     // 2. Закрыть старую страницу.
     if (_current != nullptr) {
@@ -159,8 +164,10 @@ bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFacto
                        static_cast<unsigned>(pageId),
                        static_cast<unsigned>(_sessionCounter));
         setLinkUp(false);
+        _navState = RuntimeState::LinkDown;
         return false;
     }
+    setLinkUp(true);
     return true;
 }
 
@@ -228,6 +235,8 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
     p.elementId = elementId;
     p.attribute = v.attribute;
     p.sentAtMs = nowMs();
+    p.pageId = _model.pageId();
+    p.sessionId = _model.sessionId();
     return reqId;
 }
 
@@ -249,6 +258,43 @@ bool PageRuntime::removePending(RequestId id) {
     return false;
 }
 
+bool PageRuntime::removePendingForAck(RequestId id, uint32_t pageId, uint32_t sessionId) {
+    for (std::size_t i = 0; i < _pendingCount; ++i) {
+        if (_pending[i].id != id) {
+            continue;
+        }
+        if (_pending[i].pageId != pageId || _pending[i].sessionId != sessionId) {
+            SCREENLIB_LOGD(kLogTag,
+                           "stale ACK ignored: request=%u page=%u/%u session=%u/%u",
+                           static_cast<unsigned>(id),
+                           static_cast<unsigned>(pageId),
+                           static_cast<unsigned>(_pending[i].pageId),
+                           static_cast<unsigned>(sessionId),
+                           static_cast<unsigned>(_pending[i].sessionId));
+            return false;
+        }
+        return removePending(id);
+    }
+    return false;
+}
+
+void PageRuntime::checkSnapshotTimeout() {
+    if (_navState != RuntimeState::WaitingSnapshot || _snapshotTimeoutLogged) {
+        return;
+    }
+    const uint32_t now = nowMs();
+    if (now - _snapshotRequestedAtMs > kSnapshotTimeoutMs) {
+        SCREENLIB_LOGW(kLogTag,
+                       "snapshot timeout page=%u session=%u after %u ms",
+                       static_cast<unsigned>(_model.pageId()),
+                       static_cast<unsigned>(_model.sessionId()),
+                       static_cast<unsigned>(now - _snapshotRequestedAtMs));
+        _snapshotTimeoutLogged = true;
+        setLinkUp(false);
+        _navState = RuntimeState::LinkDown;
+    }
+}
+
 void PageRuntime::checkPendingTimeouts() {
     if (_pendingCount == 0) return;
     const uint32_t now = nowMs();
@@ -260,17 +306,24 @@ void PageRuntime::checkPendingTimeouts() {
         }
     }
     if (now - minSent > kLinkTimeoutMs) {
+        const Pending& oldest = _pending[0];
         SCREENLIB_LOGW(kLogTag,
-                       "pending timeout after %u ms, pending=%u, linkDown",
-                       static_cast<unsigned>(now - minSent),
-                       static_cast<unsigned>(_pendingCount));
+                       "pending timeout page=%u session=%u pending=%u after %u ms, linkDown",
+                       static_cast<unsigned>(oldest.pageId),
+                       static_cast<unsigned>(oldest.sessionId),
+                       static_cast<unsigned>(_pendingCount),
+                       static_cast<unsigned>(now - minSent));
         setLinkUp(false);
+        _navState = RuntimeState::LinkDown;
     }
 }
 
 void PageRuntime::setLinkUp(bool up) {
     if (_linkUp == up) return;
     _linkUp = up;
+    if (!up) {
+        _navState = RuntimeState::LinkDown;
+    }
     SCREENLIB_LOGI(kLogTag, "link %s", up ? "up" : "down");
     if (_linkListener != nullptr) {
         _linkListener(up, _linkListenerUser);
@@ -408,7 +461,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             const PageSnapshot& snap = env.payload.page_snapshot;
             // Отбрасываем snapshot от устаревшей эпохи/страницы.
             if (snap.session_id != _model.sessionId() || snap.page_id != _model.pageId()) {
-                SCREENLIB_LOGW(kLogTag,
+                SCREENLIB_LOGD(kLogTag,
                                "stale snapshot ignored: page=%u/%u session=%u/%u",
                                static_cast<unsigned>(snap.page_id),
                                static_cast<unsigned>(_model.pageId()),
@@ -418,6 +471,8 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             }
             _model.applySnapshot(snap);
             _model.markReady();
+            _navState = RuntimeState::PageReady;
+            _snapshotTimeoutLogged = false;
             if (_current != nullptr && !_current->_shown) {
                 _current->onShow();
                 _current->_shown = true;
@@ -427,7 +482,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
         case Envelope_attribute_changed_tag: {
             const AttributeChanged& msg = env.payload.attribute_changed;
             if (msg.in_reply_to_request != kInvalidRequestId) {
-                removePending(msg.in_reply_to_request);
+                removePendingForAck(msg.in_reply_to_request, msg.page_id, msg.session_id);
             }
             // applyRemoteChange сам проверит page_id/session_id и отбросит stale.
             _model.applyRemoteChange(msg);
@@ -449,7 +504,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
 
             if (text.kind == TextChunkKind_TEXT_CHUNK_INPUT_EVENT) {
                 if (text.sessionId != 0 && text.sessionId != _model.sessionId()) {
-                    SCREENLIB_LOGW(kLogTag,
+                    SCREENLIB_LOGD(kLogTag,
                                    "stale text input ignored: session=%u/%u element=%u",
                                    static_cast<unsigned>(text.sessionId),
                                    static_cast<unsigned>(_model.sessionId()),
@@ -464,7 +519,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
 
             if (text.kind == TextChunkKind_TEXT_CHUNK_ATTRIBUTE_CHANGED) {
                 if (text.pageId != _model.pageId() || text.sessionId != _model.sessionId()) {
-                    SCREENLIB_LOGW(kLogTag,
+                    SCREENLIB_LOGD(kLogTag,
                                    "stale text attribute ignored: page=%u/%u session=%u/%u element=%u",
                                    static_cast<unsigned>(text.pageId),
                                    static_cast<unsigned>(_model.pageId()),
@@ -474,7 +529,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
                     break;
                 }
                 if (text.requestId != kInvalidRequestId) {
-                    removePending(text.requestId);
+                    removePendingForAck(text.requestId, text.pageId, text.sessionId);
                 }
                 _model.setString(text.elementId, text.attribute, text.text.c_str());
             }
@@ -495,7 +550,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
         case Envelope_button_event_tag: {
             const ButtonEvent& ev = env.payload.button_event;
             if (ev.session_id != 0 && ev.session_id != _model.sessionId()) {
-                SCREENLIB_LOGW(kLogTag,
+                SCREENLIB_LOGD(kLogTag,
                                "stale button_event ignored: session=%u/%u element=%u",
                                static_cast<unsigned>(ev.session_id),
                                static_cast<unsigned>(_model.sessionId()),
@@ -510,7 +565,7 @@ void PageRuntime::onEnvelope(const Envelope& env) {
         case Envelope_input_event_tag: {
             const InputEvent& ev = env.payload.input_event;
             if (ev.session_id != 0 && ev.session_id != _model.sessionId()) {
-                SCREENLIB_LOGW(kLogTag,
+                SCREENLIB_LOGD(kLogTag,
                                "stale input_event ignored: session=%u/%u element=%u",
                                static_cast<unsigned>(ev.session_id),
                                static_cast<unsigned>(_model.sessionId()),
