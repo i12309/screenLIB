@@ -1,11 +1,13 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <string>
 #include <vector>
 
 #include <unity.h>
 
 #include "bridge/ScreenBridge.h"
+#include "chunk/TextChunkAssembler.h"
 #include "chunk/TextChunkSender.h"
 #include "config/ScreenConfig.h"
 #include "frame/FrameCodec.h"
@@ -234,6 +236,26 @@ ElementAttributeValue makeIntValue(ElementAttribute a, int32_t v) {
     eav.which_value = ElementAttributeValue_int_value_tag;
     eav.value.int_value = v;
     return eav;
+}
+
+bool assembleLastSetText(const std::vector<Envelope>& envelopes, screenlib::chunk::AssembledText& out) {
+    screenlib::chunk::TextChunkAssembler assembler;
+    TextChunkAbort abort = TextChunkAbort_init_zero;
+    bool found = false;
+    for (const Envelope& env : envelopes) {
+        if (env.which_payload != Envelope_text_chunk_tag) {
+            continue;
+        }
+        screenlib::chunk::AssembledText assembled;
+        if (!assembler.push(env.payload.text_chunk, 0, assembled, abort)) {
+            return false;
+        }
+        if (!assembled.text.empty()) {
+            out = assembled;
+            found = true;
+        }
+    }
+    return found;
 }
 
 // ---------- Общая подготовка ----------
@@ -602,6 +624,77 @@ void test_pending_property_applies_after_snapshot_and_sends_set_attribute() {
     TEST_ASSERT_EQUAL_UINT32(Envelope_text_chunk_tag, out[0].which_payload);
 }
 
+void test_write_string_property_sends_full_text_chunks() {
+    TestCtx ctx;
+    TEST_ASSERT_TRUE(ctx.runtime.navigateTo<PropertyPage>());
+    ctx.transport.clearTx();
+
+    Envelope snap = makeTextPageSnapshotEnvelope(
+        PropertyPage::kPageId, 1, PropertyPage::kButtonId, "");
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, snap, 1));
+    ctx.runtime.tick();
+    ctx.transport.clearTx();
+
+    std::string longText(200, 'A');
+    auto* page = static_cast<PropertyPage*>(ctx.runtime.currentPage());
+    page->button.text = longText.c_str();
+
+    TEST_ASSERT_EQUAL_STRING(longText.c_str(), ctx.runtime.model().getString(
+                                               PropertyPage::kButtonId,
+                                               ElementAttribute_ELEMENT_ATTRIBUTE_TEXT));
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_TRUE(decodeTxEnvelopes(ctx.transport, out) > 1);
+    for (const Envelope& env : out) {
+        TEST_ASSERT_EQUAL_UINT32(Envelope_text_chunk_tag, env.which_payload);
+    }
+
+    screenlib::chunk::AssembledText assembled;
+    TEST_ASSERT_TRUE(assembleLastSetText(out, assembled));
+    TEST_ASSERT_EQUAL_UINT32(TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE, assembled.kind);
+    TEST_ASSERT_EQUAL_UINT32(PropertyPage::kButtonId, assembled.elementId);
+    TEST_ASSERT_EQUAL_STRING(longText.c_str(), assembled.text.c_str());
+}
+
+void test_queued_long_text_is_not_truncated_under_backpressure() {
+    TestCtx ctx;
+    TEST_ASSERT_TRUE(ctx.runtime.navigateTo<PropertyPage>());
+    ctx.transport.clearTx();
+
+    Envelope snap = makeTextPageSnapshotEnvelope(
+        PropertyPage::kPageId, 1, PropertyPage::kButtonId, "");
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, snap, 1));
+    ctx.runtime.tick();
+    ctx.transport.clearTx();
+
+    std::string texts[screenlib::PageRuntime::kMaxInFlight + 1];
+    screenlib::RequestId ids[screenlib::PageRuntime::kMaxInFlight + 1] = {};
+    for (std::size_t i = 0; i < screenlib::PageRuntime::kMaxInFlight + 1; ++i) {
+        texts[i] = std::string(190, static_cast<char>('A' + i));
+        ids[i] = ctx.runtime.sendSetAttributeText(
+            PropertyPage::kButtonId + static_cast<uint32_t>(i),
+            ElementAttribute_ELEMENT_ATTRIBUTE_TEXT,
+            texts[i].c_str());
+        TEST_ASSERT_NOT_EQUAL(screenlib::kInvalidRequestId, ids[i]);
+    }
+    TEST_ASSERT_EQUAL_UINT32(screenlib::PageRuntime::kMaxInFlight + 1,
+                             static_cast<uint32_t>(ctx.runtime.pendingCommands()));
+
+    Envelope ack = makeAttributeChangedAck(PropertyPage::kPageId, 1, PropertyPage::kButtonId, ids[0], 0);
+    TEST_ASSERT_TRUE(pushIncoming(ctx.transport, ack, 2));
+    ctx.runtime.tick();
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_TRUE(decodeTxEnvelopes(ctx.transport, out) > screenlib::PageRuntime::kMaxInFlight);
+
+    screenlib::chunk::AssembledText assembled;
+    TEST_ASSERT_TRUE(assembleLastSetText(out, assembled));
+    TEST_ASSERT_EQUAL_UINT32(PropertyPage::kButtonId + screenlib::PageRuntime::kMaxInFlight,
+                             assembled.elementId);
+    TEST_ASSERT_EQUAL_STRING(texts[screenlib::PageRuntime::kMaxInFlight].c_str(),
+                             assembled.text.c_str());
+}
+
 }  // namespace
 
 void run_all_tests() {
@@ -622,6 +715,8 @@ void run_all_tests() {
     RUN_TEST(test_navigate_drains_pending_queue);
     RUN_TEST(test_property_write_before_runtime_uses_pending_model);
     RUN_TEST(test_pending_property_applies_after_snapshot_and_sends_set_attribute);
+    RUN_TEST(test_write_string_property_sends_full_text_chunks);
+    RUN_TEST(test_queued_long_text_is_not_truncated_under_backpressure);
 }
 
 #ifdef ARDUINO

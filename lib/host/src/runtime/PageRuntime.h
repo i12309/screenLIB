@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "chunk/TextChunkAssembler.h"
+#include "chunk/TextChunkSender.h"
 #include "pages/PageModel.h"
 #include "proto/machine.pb.h"
 #include "types/ScreenTypes.h"
@@ -106,8 +107,10 @@ public:
     // --- State ---
 
     bool linkUp() const { return _linkUp; }
-    bool pageSynced() const { return _model.isReady() && _pendingCount == 0 && _queuedCount == 0; }
-    std::size_t pendingCommands() const { return _pendingCount + _queuedCount; }
+    bool pageSynced() const {
+        return _model.isReady() && _pendingCount == 0 && _queuedCount == 0 && _queuedTextCount == 0;
+    }
+    std::size_t pendingCommands() const { return _pendingCount + _queuedCount + _queuedTextCount; }
     RuntimeState runtimeState() const { return _navState; }
 
     void setLinkListener(LinkListener l, void* user) {
@@ -137,6 +140,9 @@ public:
     // При сбое (очередь переполнена, bridge не готов, send() провалился)
     // — возвращает kInvalidRequestId, помечает linkDown.
     RequestId sendSetAttribute(uint32_t elementId, const ElementAttributeValue& v);
+    RequestId sendSetAttributeText(uint32_t elementId,
+                                   ElementAttribute attribute,
+                                   const char* fullText);
 
     // --- Для страницы ---
 
@@ -172,6 +178,15 @@ private:
     bool sendTextChunkAbortByMode(const TextChunkAbort& abort);
     void notifyDeviceInfo(const DeviceInfo& info);
     bool enqueueSetAttribute(RequestId reqId, uint32_t elementId, const ElementAttributeValue& v);
+    bool enqueueSetAttributeText(RequestId reqId,
+                                 uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 const char* text);
+    bool sendSetAttributeNow(RequestId reqId, uint32_t elementId, const ElementAttributeValue& v);
+    bool sendSetAttributeTextNow(RequestId reqId,
+                                 uint32_t elementId,
+                                 ElementAttribute attribute,
+                                 const char* text);
     void flushQueuedSends();
 
     // Проверка таймаута на голове очереди. Вызывается из tick.
@@ -224,9 +239,20 @@ private:
         uint32_t elementId = 0;
         ElementAttributeValue value = ElementAttributeValue_init_zero;
     };
+    struct QueuedText {
+        RequestId id = kInvalidRequestId;
+        uint32_t elementId = 0;
+        ElementAttribute attribute = ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN;
+        char text[chunk::kMaxChunkedTextBytes + 1] = {};
+    };
     Queued _queued[kMaxQueued];
     std::size_t _queuedHead = 0;
     std::size_t _queuedCount = 0;
+    // ≈4 КБ статики, держим под backpressure длинного текста.
+    static constexpr std::size_t kMaxQueuedText = 4;
+    QueuedText _queuedText[kMaxQueuedText];
+    std::size_t _queuedTextHead = 0;
+    std::size_t _queuedTextCount = 0;
     RequestId _nextRequestId = 1;
     uint32_t _nextTransferId = 1;
     screenlib::chunk::TextChunkAssembler _textAssembler;

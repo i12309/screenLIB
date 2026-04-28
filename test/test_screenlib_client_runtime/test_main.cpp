@@ -1,9 +1,11 @@
 #include <deque>
+#include <string>
 #include <string.h>
 #include <vector>
 
 #include <unity.h>
 
+#include "chunk/TextChunkSender.h"
 #include "frame/FrameCodec.h"
 #include "proto/ProtoCodec.h"
 #include "runtime/ScreenClient.h"
@@ -75,6 +77,13 @@ bool pushIncomingEnvelope(MockTransport& transport, const Envelope& env, uint8_t
     return true;
 }
 
+bool collectEnvelope(const Envelope& env, void* userData) {
+    auto* envelopes = static_cast<std::vector<Envelope>*>(userData);
+    if (envelopes == nullptr) return false;
+    envelopes->push_back(env);
+    return true;
+}
+
 size_t decodeAllTxEnvelopes(const MockTransport& transport, std::vector<Envelope>& out) {
     out.clear();
     if (transport.tx.empty()) return 0;
@@ -104,6 +113,13 @@ public:
     bool setElementAttribute(const SetElementAttribute& attr) override {
         setElementAttributeCount++;
         lastElementAttribute = attr;
+        return true;
+    }
+
+    bool setTextAttribute(uint32_t elementId, const char* text) override {
+        setTextAttributeCount++;
+        lastTextElementId = elementId;
+        lastText = text != nullptr ? text : "";
         return true;
     }
 
@@ -142,12 +158,15 @@ public:
 
     int showPageCount = 0;
     int setElementAttributeCount = 0;
+    int setTextAttributeCount = 0;
     int setEventSinkCalls = 0;
     int clearEventSinkCalls = 0;
     int tickInputCalls = 0;
 
     uint32_t lastPageId = 0;
+    uint32_t lastTextElementId = 0;
     SetElementAttribute lastElementAttribute = SetElementAttribute_init_zero;
+    std::string lastText;
     std::vector<bool> emitResults;
 
 private:
@@ -238,6 +257,40 @@ void test_screen_client_incoming_attribute_command_reaches_ui() {
     TEST_ASSERT_EQUAL_INT(ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH, adapter.lastElementAttribute.attribute);
     TEST_ASSERT_EQUAL_UINT32(SetElementAttribute_int_value_tag, adapter.lastElementAttribute.which_value);
     TEST_ASSERT_EQUAL_INT32(3, adapter.lastElementAttribute.value.int_value);
+}
+
+void test_screen_client_incoming_text_chunks_reach_ui_as_full_text() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    const std::string longText(200, 'T');
+    std::vector<Envelope> chunks;
+    TEST_ASSERT_TRUE(screenlib::chunk::sendTextChunks(
+        &collectEnvelope,
+        &chunks,
+        TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE,
+        77,
+        1,
+        10,
+        70,
+        ElementAttribute_ELEMENT_ATTRIBUTE_TEXT,
+        123,
+        longText.c_str()));
+
+    uint8_t seq = 1;
+    for (const Envelope& chunk : chunks) {
+        TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, chunk, seq++));
+    }
+
+    client.tick();
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.setTextAttributeCount);
+    TEST_ASSERT_EQUAL_UINT32(70, adapter.lastTextElementId);
+    TEST_ASSERT_EQUAL_STRING(longText.c_str(), adapter.lastText.c_str());
 }
 
 void test_screen_client_tick_without_ui_adapter_is_safe() {
@@ -483,6 +536,7 @@ void test_screen_client_service_helpers_send_responses() {
 void run_all_tests() {
     RUN_TEST(test_screen_client_incoming_show_page_reaches_ui);
     RUN_TEST(test_screen_client_incoming_attribute_command_reaches_ui);
+    RUN_TEST(test_screen_client_incoming_text_chunks_reach_ui_as_full_text);
     RUN_TEST(test_screen_client_tick_without_ui_adapter_is_safe);
     RUN_TEST(test_screen_client_outgoing_button_event_from_adapter);
     RUN_TEST(test_screen_client_outgoing_button_event_with_action_from_adapter);

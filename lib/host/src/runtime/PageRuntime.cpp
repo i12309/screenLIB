@@ -160,6 +160,8 @@ bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFacto
     _pendingCount = 0;
     _queuedHead = 0;
     _queuedCount = 0;
+    _queuedTextHead = 0;
+    _queuedTextCount = 0;
     _textAssembler.reset();
     _snapshotRequestedAtMs = nowMs();
     _snapshotTimeoutLogged = false;
@@ -303,13 +305,14 @@ void IPage::writeFontProperty(uint32_t elementId, ElementAttribute attribute, El
 }
 
 void IPage::writeStringProperty(uint32_t elementId, ElementAttribute attribute, const char* value) {
-    ElementAttributeValue eav{};
-    eav.attribute = attribute;
-    eav.which_value = ElementAttributeValue_string_value_tag;
     const char* src = value != nullptr ? value : "";
-    std::strncpy(eav.value.string_value, src, sizeof(eav.value.string_value) - 1);
-    eav.value.string_value[sizeof(eav.value.string_value) - 1] = '\0';
-    writeAttributeValue(elementId, eav);
+    if (_runtime == nullptr || !_runtime->model().isReady()) {
+        _pendingModel.setString(elementId, attribute, src);
+        return;
+    }
+
+    _runtime->model().setString(elementId, attribute, src);
+    _runtime->sendSetAttributeText(elementId, attribute, src);
 }
 
 namespace {
@@ -355,6 +358,112 @@ void IPage::applyPendingAttributes() {
 
 // ---------- sendSetAttribute ----------
 
+RequestId PageRuntime::sendSetAttributeText(uint32_t elementId,
+                                            ElementAttribute attribute,
+                                            const char* fullText) {
+    if (_pendingCount >= kMaxPending) {
+        SCREENLIB_LOGW(kLogTag, "pending overflow (%u), linkDown",
+                       static_cast<unsigned>(_pendingCount));
+        setLinkUp(false);
+        return kInvalidRequestId;
+    }
+
+    // Для текста не используем ElementAttributeValue: его string_value ограничен 48 байтами.
+    const RequestId reqId = _nextRequestId++;
+    if (_nextRequestId == kInvalidRequestId) {
+        _nextRequestId = 1;  // wrap, 0 зарезервирован
+    }
+
+    const char* src = fullText != nullptr ? fullText : "";
+    if (_pendingCount >= kMaxInFlight) {
+        if (!enqueueSetAttributeText(reqId, elementId, attribute, src)) {
+            SCREENLIB_LOGW(kLogTag, "sendSetAttributeText: queue overflow (%u), linkDown",
+                           static_cast<unsigned>(_queuedTextCount));
+            setLinkUp(false);
+            return kInvalidRequestId;
+        }
+        return reqId;
+    }
+
+    return sendSetAttributeTextNow(reqId, elementId, attribute, src) ? reqId : kInvalidRequestId;
+}
+
+bool PageRuntime::sendSetAttributeNow(RequestId reqId,
+                                      uint32_t elementId,
+                                      const ElementAttributeValue& v) {
+    if (v.which_value == ElementAttributeValue_string_value_tag) {
+        return sendSetAttributeTextNow(reqId, elementId, v.attribute, v.value.string_value);
+    }
+
+    SetElementAttribute cmd = SetElementAttribute_init_zero;
+    cmd.element_id = elementId;
+    cmd.request_id = reqId;
+    cmd.session_id = _model.sessionId();
+    if (!copyAttributeValueToSetCmd(v, cmd)) {
+        SCREENLIB_LOGW(kLogTag,
+                       "sendSetAttribute: unsupported value tag=%u element=%u",
+                       static_cast<unsigned>(v.which_value),
+                       static_cast<unsigned>(elementId));
+        return false;
+    }
+
+    if (!sendSetElementAttributeByMode(cmd)) {
+        setLinkUp(false);
+        return false;
+    }
+
+    Pending& p = _pending[_pendingCount++];
+    p.id = reqId;
+    p.elementId = elementId;
+    p.attribute = v.attribute;
+    p.sentAtMs = nowMs();
+    p.pageId = _model.pageId();
+    p.sessionId = _model.sessionId();
+    return true;
+}
+
+bool PageRuntime::sendSetAttributeTextNow(RequestId reqId,
+                                          uint32_t elementId,
+                                          ElementAttribute attribute,
+                                          const char* text) {
+    const uint32_t transferId = _nextTransferId++;
+    if (_nextTransferId == 0) {
+        _nextTransferId = 1;
+    }
+
+    const char* src = text != nullptr ? text : "";
+    const std::size_t len = std::strlen(src);
+    if (len > chunk::kMaxChunkedTextBytes) {
+        SCREENLIB_LOGW(kLogTag,
+                       "sendSetAttributeText: text too long element=%u attr=%s(%u) len=%u max=%u, truncated",
+                       static_cast<unsigned>(elementId),
+                       attributeName(attribute),
+                       static_cast<unsigned>(attribute),
+                       static_cast<unsigned>(len),
+                       static_cast<unsigned>(chunk::kMaxChunkedTextBytes));
+    }
+    if (!sendTextChunksByMode(TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE,
+                              transferId,
+                              _model.sessionId(),
+                              _model.pageId(),
+                              elementId,
+                              attribute,
+                              reqId,
+                              src)) {
+        setLinkUp(false);
+        return false;
+    }
+
+    Pending& p = _pending[_pendingCount++];
+    p.id = reqId;
+    p.elementId = elementId;
+    p.attribute = attribute;
+    p.sentAtMs = nowMs();
+    p.pageId = _model.pageId();
+    p.sessionId = _model.sessionId();
+    return true;
+}
+
 RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttributeValue& v) {
     if (_pendingCount >= kMaxPending) {
         SCREENLIB_LOGW(kLogTag, "pending overflow (%u), linkDown",
@@ -378,48 +487,7 @@ RequestId PageRuntime::sendSetAttribute(uint32_t elementId, const ElementAttribu
         return reqId;
     }
 
-    bool sent = false;
-    if (v.which_value == ElementAttributeValue_string_value_tag) {
-        const uint32_t transferId = _nextTransferId++;
-        if (_nextTransferId == 0) {
-            _nextTransferId = 1;
-        }
-        sent = sendTextChunksByMode(TextChunkKind_TEXT_CHUNK_SET_ATTRIBUTE,
-                                    transferId,
-                                    _model.sessionId(),
-                                    _model.pageId(),
-                                    elementId,
-                                    v.attribute,
-                                    reqId,
-                                    v.value.string_value);
-    } else {
-        SetElementAttribute cmd = SetElementAttribute_init_zero;
-        cmd.element_id = elementId;
-        cmd.request_id = reqId;
-        cmd.session_id = _model.sessionId();
-        if (!copyAttributeValueToSetCmd(v, cmd)) {
-            SCREENLIB_LOGW(kLogTag,
-                           "sendSetAttribute: unsupported value tag=%u element=%u",
-                           static_cast<unsigned>(v.which_value),
-                           static_cast<unsigned>(elementId));
-            return kInvalidRequestId;
-        }
-        sent = sendSetElementAttributeByMode(cmd);
-    }
-
-    if (!sent) {
-        setLinkUp(false);
-        return kInvalidRequestId;
-    }
-
-    Pending& p = _pending[_pendingCount++];
-    p.id = reqId;
-    p.elementId = elementId;
-    p.attribute = v.attribute;
-    p.sentAtMs = nowMs();
-    p.pageId = _model.pageId();
-    p.sessionId = _model.sessionId();
-    return reqId;
+    return sendSetAttributeNow(reqId, elementId, v) ? reqId : kInvalidRequestId;
 }
 
 // ---------- Очередь и таймауты ----------
@@ -436,12 +504,54 @@ bool PageRuntime::enqueueSetAttribute(RequestId reqId, uint32_t elementId, const
     return true;
 }
 
+bool PageRuntime::enqueueSetAttributeText(RequestId reqId,
+                                          uint32_t elementId,
+                                          ElementAttribute attribute,
+                                          const char* text) {
+    if (_queuedTextCount >= kMaxQueuedText) {
+        return false;
+    }
+
+    const std::size_t index = (_queuedTextHead + _queuedTextCount) % kMaxQueuedText;
+    _queuedText[index].id = reqId;
+    _queuedText[index].elementId = elementId;
+    _queuedText[index].attribute = attribute;
+
+    // Очередь хранит полный текст до лимита чанков, а не 48-байтный proto-буфер.
+    const char* src = text != nullptr ? text : "";
+    const std::size_t len = std::strlen(src);
+    if (len > chunk::kMaxChunkedTextBytes) {
+        SCREENLIB_LOGW(kLogTag,
+                       "enqueueSetAttributeText: text too long element=%u attr=%s(%u) len=%u max=%u, truncated",
+                       static_cast<unsigned>(elementId),
+                       attributeName(attribute),
+                       static_cast<unsigned>(attribute),
+                       static_cast<unsigned>(len),
+                       static_cast<unsigned>(chunk::kMaxChunkedTextBytes));
+    }
+    std::strncpy(_queuedText[index].text, src, chunk::kMaxChunkedTextBytes);
+    _queuedText[index].text[chunk::kMaxChunkedTextBytes] = '\0';
+    ++_queuedTextCount;
+    return true;
+}
+
 void PageRuntime::flushQueuedSends() {
-    while (_queuedCount > 0 && _pendingCount < kMaxInFlight) {
-        Queued queued = _queued[_queuedHead];
-        _queuedHead = (_queuedHead + 1) % kMaxQueued;
-        --_queuedCount;
-        sendSetAttribute(queued.elementId, queued.value);
+    while (_pendingCount < kMaxInFlight && (_queuedCount > 0 || _queuedTextCount > 0)) {
+        const bool takeValue =
+            _queuedCount > 0 &&
+            (_queuedTextCount == 0 || _queued[_queuedHead].id <= _queuedText[_queuedTextHead].id);
+
+        if (takeValue) {
+            Queued queued = _queued[_queuedHead];
+            _queuedHead = (_queuedHead + 1) % kMaxQueued;
+            --_queuedCount;
+            sendSetAttributeNow(queued.id, queued.elementId, queued.value);
+        } else {
+            QueuedText queued = _queuedText[_queuedTextHead];
+            _queuedTextHead = (_queuedTextHead + 1) % kMaxQueuedText;
+            --_queuedTextCount;
+            sendSetAttributeTextNow(queued.id, queued.elementId, queued.attribute, queued.text);
+        }
     }
 }
 
@@ -531,6 +641,8 @@ void PageRuntime::checkPendingTimeouts() {
         _pendingCount = 0;
         _queuedHead = 0;
         _queuedCount = 0;
+        _queuedTextHead = 0;
+        _queuedTextCount = 0;
         setLinkUp(false);
         _navState = RuntimeState::LinkDown;
     }
