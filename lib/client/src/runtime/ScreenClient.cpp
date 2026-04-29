@@ -34,7 +34,9 @@ void ScreenClient::setUiAdapter(screenlib::adapter::IUiAdapter* uiAdapter) {
     _dispatcher.reset();
 
     if (_uiAdapter != nullptr) {
-        _dispatcher.reset(new CommandDispatcher(*_uiAdapter));
+        _dispatcher.reset(new CommandDispatcher(*_uiAdapter,
+                                                &ScreenClient::onDispatcherResponseStatic,
+                                                this));
         if (_initialized) {
             _uiAdapter->setEventSink(&ScreenClient::onUiEventStatic, this);
         }
@@ -56,12 +58,19 @@ void ScreenClient::init() {
 }
 
 void ScreenClient::tick() {
+    tick(_autoTickNowMs++);
+}
+
+void ScreenClient::tick(uint32_t nowMs) {
     if (!_initialized) {
         return;
     }
 
     // 1) Принять и декодировать входящие сообщения из транспорта.
     _bridge.processIncoming();
+    if (_dispatcher != nullptr) {
+        _dispatcher->pollTimeout(nowMs);
+    }
 
     // 2) Дать UI адаптеру сгенерировать пользовательские события.
     if (_uiAdapter != nullptr) {
@@ -177,6 +186,18 @@ bool ScreenClient::onUiEvent(const Envelope& env) {
     }
 
     return enqueueUiEvent(env);
+}
+
+bool ScreenClient::onDispatcherResponseStatic(const Envelope& env, void* userData) {
+    ScreenClient* self = static_cast<ScreenClient*>(userData);
+    if (self == nullptr) {
+        return false;
+    }
+    return self->onDispatcherResponse(env);
+}
+
+bool ScreenClient::onDispatcherResponse(const Envelope& env) {
+    return sendOutgoingEnvelope(env);
 }
 
 bool ScreenClient::enqueueUiEvent(const Envelope& env) {

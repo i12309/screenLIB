@@ -35,6 +35,7 @@ public:
 
     // Главный цикл экранной стороны.
     void tick();
+    void tick(uint32_t nowMs);
 
     bool connected() const;
 
@@ -76,12 +77,15 @@ private:
     size_t _uiEventTail = 0;
     size_t _uiEventCount = 0;
     uint32_t _nextTransferId = 1;
+    uint32_t _autoTickNowMs = 0;
 
     static void onBridgeEnvelopeStatic(const Envelope& env, void* userData);
     void onBridgeEnvelope(const Envelope& env);
 
     static bool onUiEventStatic(const Envelope& env, void* userData);
     bool onUiEvent(const Envelope& env);
+    static bool onDispatcherResponseStatic(const Envelope& env, void* userData);
+    bool onDispatcherResponse(const Envelope& env);
 
     bool enqueueUiEvent(const Envelope& env);
     bool flushUiEvents();

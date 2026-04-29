@@ -17,6 +17,10 @@ public:
     virtual ~IUiAdapter() = default;
 
     virtual bool showPage(uint32_t pageId) = 0;
+    virtual bool preparePage(uint32_t pageId) {
+        (void)pageId;
+        return true;
+    }
     // Применить один типизированный атрибут элемента (width/height/цвет/шрифт и т.д.).
     virtual bool setElementAttribute(const SetElementAttribute& attr) = 0;
     virtual bool setTextAttribute(uint32_t elementId, const char* text) {

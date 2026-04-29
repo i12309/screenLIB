@@ -110,6 +110,12 @@ public:
         return true;
     }
 
+    bool preparePage(uint32_t pageId) override {
+        preparePageCount++;
+        lastPreparedPageId = pageId;
+        return preparePageResult;
+    }
+
     bool setElementAttribute(const SetElementAttribute& attr) override {
         setElementAttributeCount++;
         lastElementAttribute = attr;
@@ -157,6 +163,7 @@ public:
     EventSink currentSink() const { return _sink; }
 
     int showPageCount = 0;
+    int preparePageCount = 0;
     int setElementAttributeCount = 0;
     int setTextAttributeCount = 0;
     int setEventSinkCalls = 0;
@@ -164,10 +171,12 @@ public:
     int tickInputCalls = 0;
 
     uint32_t lastPageId = 0;
+    uint32_t lastPreparedPageId = 0;
     uint32_t lastTextElementId = 0;
     SetElementAttribute lastElementAttribute = SetElementAttribute_init_zero;
     std::string lastText;
     std::vector<bool> emitResults;
+    bool preparePageResult = true;
 
 private:
     EventSink _sink = nullptr;
@@ -471,6 +480,175 @@ void test_screen_client_incoming_non_screen_envelope_does_not_touch_ui() {
     TEST_ASSERT_EQUAL_INT(0, adapter.setElementAttributeCount);
 }
 
+void test_screen_client_prepare_page_does_not_show_until_commit() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    Envelope prepare{};
+    prepare.which_payload = Envelope_prepare_page_tag;
+    prepare.payload.prepare_page.page_id = 7;
+    prepare.payload.prepare_page.session_id = 44;
+    prepare.payload.prepare_page.commit_timeout_ms = 1000;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, prepare, 1));
+
+    client.tick(10);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.preparePageCount);
+    TEST_ASSERT_EQUAL_INT(0, adapter.showPageCount);
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(1u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(Envelope_page_prepared_tag, out[0].which_payload);
+    TEST_ASSERT_TRUE(out[0].payload.page_prepared.ok);
+
+    Envelope commit{};
+    commit.which_payload = Envelope_commit_page_tag;
+    commit.payload.commit_page.page_id = 7;
+    commit.payload.commit_page.session_id = 44;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, commit, 2));
+
+    client.tick(20);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.showPageCount);
+    TEST_ASSERT_EQUAL_UINT32(7, adapter.lastPageId);
+    TEST_ASSERT_EQUAL_UINT32(2u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(Envelope_page_shown_tag, out[1].which_payload);
+    TEST_ASSERT_TRUE(out[1].payload.page_shown.ok);
+}
+
+void test_screen_client_apply_page_data_before_commit() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    Envelope prepare{};
+    prepare.which_payload = Envelope_prepare_page_tag;
+    prepare.payload.prepare_page.page_id = 3;
+    prepare.payload.prepare_page.session_id = 55;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, prepare, 1));
+
+    Envelope data{};
+    data.which_payload = Envelope_apply_page_data_tag;
+    data.payload.apply_page_data.page_id = 3;
+    data.payload.apply_page_data.session_id = 55;
+    data.payload.apply_page_data.block_index = 0;
+    data.payload.apply_page_data.block_count = 1;
+    data.payload.apply_page_data.elements_count = 1;
+    data.payload.apply_page_data.elements[0].element_id = 70;
+    data.payload.apply_page_data.elements[0].attributes_count = 1;
+    data.payload.apply_page_data.elements[0].attributes[0].attribute =
+        ElementAttribute_ELEMENT_ATTRIBUTE_BORDER_WIDTH;
+    data.payload.apply_page_data.elements[0].attributes[0].which_value =
+        ElementAttributeValue_int_value_tag;
+    data.payload.apply_page_data.elements[0].attributes[0].value.int_value = 5;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, data, 2));
+
+    client.tick(100);
+
+    TEST_ASSERT_EQUAL_INT(0, adapter.showPageCount);
+    TEST_ASSERT_EQUAL_INT(1, adapter.setElementAttributeCount);
+    TEST_ASSERT_EQUAL_UINT32(70, adapter.lastElementAttribute.element_id);
+    TEST_ASSERT_EQUAL_INT32(5, adapter.lastElementAttribute.value.int_value);
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(2u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(Envelope_page_data_applied_tag, out[1].which_payload);
+    TEST_ASSERT_TRUE(out[1].payload.page_data_applied.ok);
+    TEST_ASSERT_EQUAL_UINT32(1, out[1].payload.page_data_applied.applied_count);
+}
+
+void test_screen_client_commit_wrong_session_is_ignored() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    Envelope prepare{};
+    prepare.which_payload = Envelope_prepare_page_tag;
+    prepare.payload.prepare_page.page_id = 4;
+    prepare.payload.prepare_page.session_id = 10;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, prepare, 1));
+
+    Envelope commit{};
+    commit.which_payload = Envelope_commit_page_tag;
+    commit.payload.commit_page.page_id = 4;
+    commit.payload.commit_page.session_id = 11;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, commit, 2));
+
+    client.tick(1);
+
+    TEST_ASSERT_EQUAL_INT(0, adapter.showPageCount);
+}
+
+void test_screen_client_prepare_timeout_shows_load_and_late_commit_ignored() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    Envelope prepare{};
+    prepare.which_payload = Envelope_prepare_page_tag;
+    prepare.payload.prepare_page.page_id = 9;
+    prepare.payload.prepare_page.session_id = 77;
+    prepare.payload.prepare_page.commit_timeout_ms = 300;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, prepare, 1));
+    client.tick(0);
+
+    client.tick(301);
+    TEST_ASSERT_EQUAL_INT(1, adapter.showPageCount);
+    TEST_ASSERT_EQUAL_UINT32(0, adapter.lastPageId);
+
+    std::vector<Envelope> out;
+    TEST_ASSERT_EQUAL_UINT32(2u, static_cast<uint32_t>(decodeAllTxEnvelopes(transport, out)));
+    TEST_ASSERT_EQUAL_UINT32(Envelope_page_transaction_timeout_tag, out[1].which_payload);
+
+    Envelope commit{};
+    commit.which_payload = Envelope_commit_page_tag;
+    commit.payload.commit_page.page_id = 9;
+    commit.payload.commit_page.session_id = 77;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, commit, 2));
+    client.tick(302);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.showPageCount);
+}
+
+void test_screen_client_legacy_show_page_aliases_pending_commit() {
+    MockTransport transport;
+    FakeUiAdapter adapter;
+    screenlib::client::ScreenClient client(transport);
+
+    client.setUiAdapter(&adapter);
+    client.init();
+
+    Envelope prepare{};
+    prepare.which_payload = Envelope_prepare_page_tag;
+    prepare.payload.prepare_page.page_id = 12;
+    prepare.payload.prepare_page.session_id = 88;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, prepare, 1));
+
+    Envelope show{};
+    show.which_payload = Envelope_show_page_tag;
+    show.payload.show_page.page_id = 12;
+    show.payload.show_page.session_id = 88;
+    TEST_ASSERT_TRUE(pushIncomingEnvelope(transport, show, 2));
+
+    client.tick(1);
+
+    TEST_ASSERT_EQUAL_INT(1, adapter.showPageCount);
+    TEST_ASSERT_EQUAL_UINT32(12, adapter.lastPageId);
+}
+
 void test_screen_client_init_is_idempotent() {
     MockTransport transport;
     FakeUiAdapter adapter;
@@ -545,6 +723,11 @@ void run_all_tests() {
     RUN_TEST(test_screen_client_ui_event_queue_overflow_is_safe);
     RUN_TEST(test_screen_client_rejects_non_event_outbound_envelope_from_adapter);
     RUN_TEST(test_screen_client_incoming_non_screen_envelope_does_not_touch_ui);
+    RUN_TEST(test_screen_client_prepare_page_does_not_show_until_commit);
+    RUN_TEST(test_screen_client_apply_page_data_before_commit);
+    RUN_TEST(test_screen_client_commit_wrong_session_is_ignored);
+    RUN_TEST(test_screen_client_prepare_timeout_shows_load_and_late_commit_ignored);
+    RUN_TEST(test_screen_client_legacy_show_page_aliases_pending_commit);
     RUN_TEST(test_screen_client_init_is_idempotent);
     RUN_TEST(test_screen_client_service_helpers_send_responses);
 }

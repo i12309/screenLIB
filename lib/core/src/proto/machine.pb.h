@@ -10,6 +10,16 @@
 #endif
 
 /* Enum definitions */
+typedef enum _PageTransitionError {
+    PageTransitionError_PAGE_TRANSITION_OK = 0,
+    PageTransitionError_PAGE_TRANSITION_UNKNOWN_PAGE = 1,
+    PageTransitionError_PAGE_TRANSITION_CREATE_FAILED = 2,
+    PageTransitionError_PAGE_TRANSITION_BAD_SESSION = 3,
+    PageTransitionError_PAGE_TRANSITION_DATA_FAILED = 4,
+    PageTransitionError_PAGE_TRANSITION_TIMEOUT = 5,
+    PageTransitionError_PAGE_TRANSITION_ABORTED = 6
+} PageTransitionError;
+
 /* Поддерживаемые атрибуты элемента (точечный set/get). */
 typedef enum _ElementAttribute {
     ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN = 0,
@@ -78,6 +88,54 @@ typedef struct _ShowPage {
     uint32_t session_id;
 } ShowPage;
 
+typedef struct _PreparePage {
+    uint32_t page_id;
+    uint32_t session_id;
+    uint32_t commit_timeout_ms;
+    bool has_initial_data;
+} PreparePage;
+
+typedef struct _PagePrepared {
+    uint32_t page_id;
+    uint32_t session_id;
+    bool ok;
+    PageTransitionError error;
+} PagePrepared;
+
+typedef struct _PageDataApplied {
+    uint32_t page_id;
+    uint32_t session_id;
+    uint32_t block_index;
+    bool ok;
+    uint32_t applied_count;
+    uint32_t failed_count;
+    PageTransitionError error;
+} PageDataApplied;
+
+typedef struct _CommitPage {
+    uint32_t page_id;
+    uint32_t session_id;
+} CommitPage;
+
+typedef struct _PageShown {
+    uint32_t page_id;
+    uint32_t session_id;
+    bool ok;
+    PageTransitionError error;
+} PageShown;
+
+typedef struct _AbortPreparedPage {
+    uint32_t page_id;
+    uint32_t session_id;
+    PageTransitionError reason;
+} AbortPreparedPage;
+
+typedef struct _PageTransactionTimeout {
+    uint32_t page_id;
+    uint32_t session_id;
+    uint32_t waited_ms;
+} PageTransactionTimeout;
+
 typedef PB_BYTES_ARRAY_T(128) TextChunk_chunk_data_t;
 typedef struct _TextChunk {
     uint32_t transfer_id;
@@ -138,6 +196,15 @@ typedef struct _ElementSnapshot {
     pb_size_t attributes_count;
     ElementAttributeValue attributes[10];
 } ElementSnapshot;
+
+typedef struct _ApplyPageData {
+    uint32_t page_id;
+    uint32_t session_id;
+    uint32_t block_index;
+    uint32_t block_count;
+    pb_size_t elements_count;
+    ElementSnapshot elements[8];
+} ApplyPageData;
 
 /* Полный снимок состояния страницы (экран → бэк).
  Отправляется экраном в ответ на ShowPage с тем же session_id.
@@ -266,6 +333,14 @@ typedef struct _Envelope {
         AttributeChanged attribute_changed; /* screen -> backend (дельта + ACK команды) */
         TextChunk text_chunk;
         TextChunkAbort text_chunk_abort;
+        PreparePage prepare_page;
+        PagePrepared page_prepared;
+        ApplyPageData apply_page_data;
+        PageDataApplied page_data_applied;
+        CommitPage commit_page;
+        PageShown page_shown;
+        AbortPreparedPage abort_prepared_page;
+        PageTransactionTimeout page_transaction_timeout;
     } payload;
 } Envelope;
 
@@ -275,6 +350,10 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _PageTransitionError_MIN PageTransitionError_PAGE_TRANSITION_OK
+#define _PageTransitionError_MAX PageTransitionError_PAGE_TRANSITION_ABORTED
+#define _PageTransitionError_ARRAYSIZE ((PageTransitionError)(PageTransitionError_PAGE_TRANSITION_ABORTED+1))
+
 #define _ElementAttribute_MIN ElementAttribute_ELEMENT_ATTRIBUTE_UNKNOWN
 #define _ElementAttribute_MAX ElementAttribute_ELEMENT_ATTRIBUTE_Y
 #define _ElementAttribute_ARRAYSIZE ((ElementAttribute)(ElementAttribute_ELEMENT_ATTRIBUTE_Y+1))
@@ -299,6 +378,18 @@ extern "C" {
 #define _ButtonAction_MAX ButtonAction_REPEAT
 #define _ButtonAction_ARRAYSIZE ((ButtonAction)(ButtonAction_REPEAT+1))
 
+
+
+
+#define PagePrepared_error_ENUMTYPE PageTransitionError
+
+
+#define PageDataApplied_error_ENUMTYPE PageTransitionError
+
+
+#define PageShown_error_ENUMTYPE PageTransitionError
+
+#define AbortPreparedPage_reason_ENUMTYPE PageTransitionError
 
 
 #define TextChunk_attribute_ENUMTYPE ElementAttribute
@@ -334,6 +425,14 @@ extern "C" {
 /* Initializer values for message structs */
 #define Envelope_init_default                    {0, {ShowPage_init_default}}
 #define ShowPage_init_default                    {0, 0}
+#define PreparePage_init_default                 {0, 0, 0, 0}
+#define PagePrepared_init_default                {0, 0, 0, _PageTransitionError_MIN}
+#define ApplyPageData_init_default               {0, 0, 0, 0, 0, {ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default, ElementSnapshot_init_default}}
+#define PageDataApplied_init_default             {0, 0, 0, 0, 0, 0, _PageTransitionError_MIN}
+#define CommitPage_init_default                  {0, 0}
+#define PageShown_init_default                   {0, 0, 0, _PageTransitionError_MIN}
+#define AbortPreparedPage_init_default           {0, 0, _PageTransitionError_MIN}
+#define PageTransactionTimeout_init_default      {0, 0, 0}
 #define TextChunk_init_default                   {0, 0, 0, 0, _ElementAttribute_MIN, 0, 0, {0, {0}}, 0, _TextChunkKind_MIN}
 #define TextChunkAbort_init_default              {0, 0, _TextChunkAbortReason_MIN}
 #define SetElementAttribute_init_default         {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
@@ -353,6 +452,14 @@ extern "C" {
 #define ElementAttributeState_init_default       {0, 0, 0, _ElementAttribute_MIN, 0, 0, {0}}
 #define Envelope_init_zero                       {0, {ShowPage_init_zero}}
 #define ShowPage_init_zero                       {0, 0}
+#define PreparePage_init_zero                    {0, 0, 0, 0}
+#define PagePrepared_init_zero                   {0, 0, 0, _PageTransitionError_MIN}
+#define ApplyPageData_init_zero                  {0, 0, 0, 0, 0, {ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero, ElementSnapshot_init_zero}}
+#define PageDataApplied_init_zero                {0, 0, 0, 0, 0, 0, _PageTransitionError_MIN}
+#define CommitPage_init_zero                     {0, 0}
+#define PageShown_init_zero                      {0, 0, 0, _PageTransitionError_MIN}
+#define AbortPreparedPage_init_zero              {0, 0, _PageTransitionError_MIN}
+#define PageTransactionTimeout_init_zero         {0, 0, 0}
 #define TextChunk_init_zero                      {0, 0, 0, 0, _ElementAttribute_MIN, 0, 0, {0, {0}}, 0, _TextChunkKind_MIN}
 #define TextChunkAbort_init_zero                 {0, 0, _TextChunkAbortReason_MIN}
 #define SetElementAttribute_init_zero            {0, _ElementAttribute_MIN, 0, {0}, 0, 0}
@@ -374,6 +481,33 @@ extern "C" {
 /* Field tags (for use in manual encoding/decoding) */
 #define ShowPage_page_id_tag                     1
 #define ShowPage_session_id_tag                  2
+#define PreparePage_page_id_tag                  1
+#define PreparePage_session_id_tag               2
+#define PreparePage_commit_timeout_ms_tag        3
+#define PreparePage_has_initial_data_tag         4
+#define PagePrepared_page_id_tag                 1
+#define PagePrepared_session_id_tag              2
+#define PagePrepared_ok_tag                      3
+#define PagePrepared_error_tag                   4
+#define PageDataApplied_page_id_tag              1
+#define PageDataApplied_session_id_tag           2
+#define PageDataApplied_block_index_tag          3
+#define PageDataApplied_ok_tag                   4
+#define PageDataApplied_applied_count_tag        5
+#define PageDataApplied_failed_count_tag         6
+#define PageDataApplied_error_tag                7
+#define CommitPage_page_id_tag                   1
+#define CommitPage_session_id_tag                2
+#define PageShown_page_id_tag                    1
+#define PageShown_session_id_tag                 2
+#define PageShown_ok_tag                         3
+#define PageShown_error_tag                      4
+#define AbortPreparedPage_page_id_tag            1
+#define AbortPreparedPage_session_id_tag         2
+#define AbortPreparedPage_reason_tag             3
+#define PageTransactionTimeout_page_id_tag       1
+#define PageTransactionTimeout_session_id_tag    2
+#define PageTransactionTimeout_waited_ms_tag     3
 #define TextChunk_transfer_id_tag                1
 #define TextChunk_session_id_tag                 2
 #define TextChunk_page_id_tag                    3
@@ -403,6 +537,11 @@ extern "C" {
 #define ElementAttributeValue_string_value_tag   6
 #define ElementSnapshot_element_id_tag           1
 #define ElementSnapshot_attributes_tag           2
+#define ApplyPageData_page_id_tag                1
+#define ApplyPageData_session_id_tag             2
+#define ApplyPageData_block_index_tag            3
+#define ApplyPageData_block_count_tag            4
+#define ApplyPageData_elements_tag               5
 #define PageSnapshot_session_id_tag              1
 #define PageSnapshot_page_id_tag                 2
 #define PageSnapshot_elements_tag                3
@@ -462,6 +601,14 @@ extern "C" {
 #define Envelope_attribute_changed_tag           24
 #define Envelope_text_chunk_tag                  25
 #define Envelope_text_chunk_abort_tag            26
+#define Envelope_prepare_page_tag                27
+#define Envelope_page_prepared_tag               28
+#define Envelope_apply_page_data_tag             29
+#define Envelope_page_data_applied_tag           30
+#define Envelope_commit_page_tag                 31
+#define Envelope_page_shown_tag                  32
+#define Envelope_abort_prepared_page_tag         33
+#define Envelope_page_transaction_timeout_tag    34
 
 /* Struct field encoding specification for nanopb */
 #define Envelope_FIELDLIST(X, a) \
@@ -480,7 +627,15 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,element_attribute_state,payload.elem
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_snapshot,payload.page_snapshot),  23) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,attribute_changed,payload.attribute_changed),  24) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk,payload.text_chunk),  25) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk_abort,payload.text_chunk_abort),  26)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk_abort,payload.text_chunk_abort),  26) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,prepare_page,payload.prepare_page),  27) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_prepared,payload.page_prepared),  28) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,apply_page_data,payload.apply_page_data),  29) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_data_applied,payload.page_data_applied),  30) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,commit_page,payload.commit_page),  31) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_shown,payload.page_shown),  32) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,abort_prepared_page,payload.abort_prepared_page),  33) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,page_transaction_timeout,payload.page_transaction_timeout),  34)
 #define Envelope_CALLBACK NULL
 #define Envelope_DEFAULT NULL
 #define Envelope_payload_show_page_MSGTYPE ShowPage
@@ -499,12 +654,85 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload,text_chunk_abort,payload.text_chunk_
 #define Envelope_payload_attribute_changed_MSGTYPE AttributeChanged
 #define Envelope_payload_text_chunk_MSGTYPE TextChunk
 #define Envelope_payload_text_chunk_abort_MSGTYPE TextChunkAbort
+#define Envelope_payload_prepare_page_MSGTYPE PreparePage
+#define Envelope_payload_page_prepared_MSGTYPE PagePrepared
+#define Envelope_payload_apply_page_data_MSGTYPE ApplyPageData
+#define Envelope_payload_page_data_applied_MSGTYPE PageDataApplied
+#define Envelope_payload_commit_page_MSGTYPE CommitPage
+#define Envelope_payload_page_shown_MSGTYPE PageShown
+#define Envelope_payload_abort_prepared_page_MSGTYPE AbortPreparedPage
+#define Envelope_payload_page_transaction_timeout_MSGTYPE PageTransactionTimeout
 
 #define ShowPage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   session_id,        2)
 #define ShowPage_CALLBACK NULL
 #define ShowPage_DEFAULT NULL
+
+#define PreparePage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   commit_timeout_ms,   3) \
+X(a, STATIC,   SINGULAR, BOOL,     has_initial_data,   4)
+#define PreparePage_CALLBACK NULL
+#define PreparePage_DEFAULT NULL
+
+#define PagePrepared_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, BOOL,     ok,                3) \
+X(a, STATIC,   SINGULAR, UENUM,    error,             4)
+#define PagePrepared_CALLBACK NULL
+#define PagePrepared_DEFAULT NULL
+
+#define ApplyPageData_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   block_index,       3) \
+X(a, STATIC,   SINGULAR, UINT32,   block_count,       4) \
+X(a, STATIC,   REPEATED, MESSAGE,  elements,          5)
+#define ApplyPageData_CALLBACK NULL
+#define ApplyPageData_DEFAULT NULL
+#define ApplyPageData_elements_MSGTYPE ElementSnapshot
+
+#define PageDataApplied_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   block_index,       3) \
+X(a, STATIC,   SINGULAR, BOOL,     ok,                4) \
+X(a, STATIC,   SINGULAR, UINT32,   applied_count,     5) \
+X(a, STATIC,   SINGULAR, UINT32,   failed_count,      6) \
+X(a, STATIC,   SINGULAR, UENUM,    error,             7)
+#define PageDataApplied_CALLBACK NULL
+#define PageDataApplied_DEFAULT NULL
+
+#define CommitPage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2)
+#define CommitPage_CALLBACK NULL
+#define CommitPage_DEFAULT NULL
+
+#define PageShown_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, BOOL,     ok,                3) \
+X(a, STATIC,   SINGULAR, UENUM,    error,             4)
+#define PageShown_CALLBACK NULL
+#define PageShown_DEFAULT NULL
+
+#define AbortPreparedPage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UENUM,    reason,            3)
+#define AbortPreparedPage_CALLBACK NULL
+#define AbortPreparedPage_DEFAULT NULL
+
+#define PageTransactionTimeout_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   page_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   waited_ms,         3)
+#define PageTransactionTimeout_CALLBACK NULL
+#define PageTransactionTimeout_DEFAULT NULL
 
 #define TextChunk_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   transfer_id,       1) \
@@ -652,6 +880,14 @@ X(a, STATIC,   ONEOF,    UENUM,    (value,font_value,value.font_value),   8)
 
 extern const pb_msgdesc_t Envelope_msg;
 extern const pb_msgdesc_t ShowPage_msg;
+extern const pb_msgdesc_t PreparePage_msg;
+extern const pb_msgdesc_t PagePrepared_msg;
+extern const pb_msgdesc_t ApplyPageData_msg;
+extern const pb_msgdesc_t PageDataApplied_msg;
+extern const pb_msgdesc_t CommitPage_msg;
+extern const pb_msgdesc_t PageShown_msg;
+extern const pb_msgdesc_t AbortPreparedPage_msg;
+extern const pb_msgdesc_t PageTransactionTimeout_msg;
 extern const pb_msgdesc_t TextChunk_msg;
 extern const pb_msgdesc_t TextChunkAbort_msg;
 extern const pb_msgdesc_t SetElementAttribute_msg;
@@ -673,6 +909,14 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define Envelope_fields &Envelope_msg
 #define ShowPage_fields &ShowPage_msg
+#define PreparePage_fields &PreparePage_msg
+#define PagePrepared_fields &PagePrepared_msg
+#define ApplyPageData_fields &ApplyPageData_msg
+#define PageDataApplied_fields &PageDataApplied_msg
+#define CommitPage_fields &CommitPage_msg
+#define PageShown_fields &PageShown_msg
+#define AbortPreparedPage_fields &AbortPreparedPage_msg
+#define PageTransactionTimeout_fields &PageTransactionTimeout_msg
 #define TextChunk_fields &TextChunk_msg
 #define TextChunkAbort_fields &TextChunkAbort_msg
 #define SetElementAttribute_fields &SetElementAttribute_msg
@@ -692,8 +936,11 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 #define ElementAttributeState_fields &ElementAttributeState_msg
 
 /* Maximum encoded size of messages (where known) */
+#define AbortPreparedPage_size                   14
+#define ApplyPageData_size                       4336
 #define AttributeChanged_size                    79
 #define ButtonEvent_size                         20
+#define CommitPage_size                          12
 #define CurrentPage_size                         12
 #define DeviceInfo_size                          178
 #define ElementAttributeState_size               33
@@ -704,7 +951,12 @@ extern const pb_msgdesc_t ElementAttributeState_msg;
 #define Hello_size                               181
 #define InputEvent_size                          29
 #define MACHINE_PB_H_MAX_SIZE                    Envelope_size
+#define PageDataApplied_size                     34
+#define PagePrepared_size                        16
+#define PageShown_size                           16
 #define PageSnapshot_size                        8636
+#define PageTransactionTimeout_size              18
+#define PreparePage_size                         20
 #define RequestCurrentPage_size                  6
 #define RequestDeviceInfo_size                   6
 #define RequestElementAttribute_size             20

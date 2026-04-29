@@ -45,6 +45,14 @@ message Envelope {
     AttributeChanged         attribute_changed           = 24; // screen -> backend (дельта + ACK команды)
     TextChunk                text_chunk                  = 25;
     TextChunkAbort           text_chunk_abort            = 26;
+    PreparePage              prepare_page                = 27;
+    PagePrepared             page_prepared               = 28;
+    ApplyPageData            apply_page_data             = 29;
+    PageDataApplied          page_data_applied           = 30;
+    CommitPage               commit_page                 = 31;
+    PageShown                page_shown                  = 32;
+    AbortPreparedPage        abort_prepared_page         = 33;
+    PageTransactionTimeout   page_transaction_timeout    = 34;
   }
 }
 
@@ -58,6 +66,72 @@ message Envelope {
 message ShowPage {
   uint32 page_id    = 1;
   uint32 session_id = 2;
+}
+
+enum PageTransitionError {
+  PAGE_TRANSITION_OK = 0;
+  PAGE_TRANSITION_UNKNOWN_PAGE = 1;
+  PAGE_TRANSITION_CREATE_FAILED = 2;
+  PAGE_TRANSITION_BAD_SESSION = 3;
+  PAGE_TRANSITION_DATA_FAILED = 4;
+  PAGE_TRANSITION_TIMEOUT = 5;
+  PAGE_TRANSITION_ABORTED = 6;
+}
+
+message PreparePage {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  uint32 commit_timeout_ms = 3;
+  bool has_initial_data = 4;
+}
+
+message PagePrepared {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  bool ok = 3;
+  PageTransitionError error = 4;
+}
+
+message ApplyPageData {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  uint32 block_index = 3;
+  uint32 block_count = 4;
+  repeated ElementSnapshot elements = 5;
+}
+
+message PageDataApplied {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  uint32 block_index = 3;
+  bool ok = 4;
+  uint32 applied_count = 5;
+  uint32 failed_count = 6;
+  PageTransitionError error = 7;
+}
+
+message CommitPage {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+}
+
+message PageShown {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  bool ok = 3;
+  PageTransitionError error = 4;
+}
+
+message AbortPreparedPage {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  PageTransitionError reason = 3;
+}
+
+message PageTransactionTimeout {
+  uint32 page_id = 1;
+  uint32 session_id = 2;
+  uint32 waited_ms = 3;
 }
 
 

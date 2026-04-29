@@ -27,4 +27,4 @@ DeviceInfo.instance_id          max_size:32
 ElementAttributeValue.string_value  max_size:48
 ElementSnapshot.attributes          max_count:10
 PageSnapshot.elements               max_count:16
-
+ApplyPageData.elements              max_count:8

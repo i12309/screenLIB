@@ -26,6 +26,14 @@ const char* screenlib_payload_name(pb_size_t tag) {
         case Envelope_attribute_changed_tag: return "attribute_changed";
         case Envelope_text_chunk_tag: return "text_chunk";
         case Envelope_text_chunk_abort_tag: return "text_chunk_abort";
+        case Envelope_prepare_page_tag: return "prepare_page";
+        case Envelope_page_prepared_tag: return "page_prepared";
+        case Envelope_apply_page_data_tag: return "apply_page_data";
+        case Envelope_page_data_applied_tag: return "page_data_applied";
+        case Envelope_commit_page_tag: return "commit_page";
+        case Envelope_page_shown_tag: return "page_shown";
+        case Envelope_abort_prepared_page_tag: return "abort_prepared_page";
+        case Envelope_page_transaction_timeout_tag: return "page_transaction_timeout";
         default: return "unknown";
     }
 }
@@ -107,6 +115,41 @@ bool ScreenBridge::showPage(uint32_t pageId, uint32_t sessionId) {
     Envelope& env = prepareTxEnvelope(Envelope_show_page_tag);
     env.payload.show_page.page_id = pageId;
     env.payload.show_page.session_id = sessionId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::preparePage(uint32_t pageId,
+                               uint32_t sessionId,
+                               uint32_t commitTimeoutMs,
+                               bool hasInitialData) {
+    Envelope& env = prepareTxEnvelope(Envelope_prepare_page_tag);
+    env.payload.prepare_page.page_id = pageId;
+    env.payload.prepare_page.session_id = sessionId;
+    env.payload.prepare_page.commit_timeout_ms = commitTimeoutMs;
+    env.payload.prepare_page.has_initial_data = hasInitialData;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::applyPageData(const ApplyPageData& data) {
+    Envelope& env = prepareTxEnvelope(Envelope_apply_page_data_tag);
+    env.payload.apply_page_data = data;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::commitPage(uint32_t pageId, uint32_t sessionId) {
+    Envelope& env = prepareTxEnvelope(Envelope_commit_page_tag);
+    env.payload.commit_page.page_id = pageId;
+    env.payload.commit_page.session_id = sessionId;
+    return sendEnvelope(env);
+}
+
+bool ScreenBridge::abortPreparedPage(uint32_t pageId,
+                                     uint32_t sessionId,
+                                     PageTransitionError reason) {
+    Envelope& env = prepareTxEnvelope(Envelope_abort_prepared_page_tag);
+    env.payload.abort_prepared_page.page_id = pageId;
+    env.payload.abort_prepared_page.session_id = sessionId;
+    env.payload.abort_prepared_page.reason = reason;
     return sendEnvelope(env);
 }
 

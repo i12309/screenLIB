@@ -46,6 +46,15 @@ public:
 
     // Базовые UI-команды (сторона host -> сторона screen).
     bool showPage(uint32_t pageId, uint32_t sessionId = 0);
+    bool preparePage(uint32_t pageId,
+                     uint32_t sessionId,
+                     uint32_t commitTimeoutMs = 0,
+                     bool hasInitialData = false);
+    bool applyPageData(const ApplyPageData& data);
+    bool commitPage(uint32_t pageId, uint32_t sessionId);
+    bool abortPreparedPage(uint32_t pageId,
+                           uint32_t sessionId,
+                           PageTransitionError reason = PageTransitionError_PAGE_TRANSITION_ABORTED);
     bool sendHeartbeat(uint32_t uptimeMs);
 
     // Типизированные атрибуты UI (сторона host -> сторона screen).
