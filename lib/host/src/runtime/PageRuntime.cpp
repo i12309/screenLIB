@@ -114,12 +114,14 @@ void PageRuntime::tick() {
         sendTextChunkAbortByMode(abort);
     }
 
-    if (_current != nullptr && _current->_shown) {
+    if (_current != nullptr && _current->_shown && !_pendingNav.active) {
         _current->onTick();
     }
 
     flushQueuedSends();
+    maybeCommitPendingNavigation();
     checkSnapshotTimeout();
+    checkNavigationTimeout();
     checkPendingTimeouts();
 }
 
@@ -153,6 +155,58 @@ bool PageRuntime::back() {
 
 bool PageRuntime::swapCurrent(std::unique_ptr<IPage> next, PageFactory nextFactory, uint32_t pageId) {
     if (next == nullptr) return false;
+
+    if (usePageTransactions()) {
+        abortPendingNavigation(PageTransitionError_PAGE_TRANSITION_ABORTED, true);
+
+        _pendingCount = 0;
+        _queuedHead = 0;
+        _queuedCount = 0;
+        _queuedTextHead = 0;
+        _queuedTextCount = 0;
+        _textAssembler.reset();
+        _snapshotRequestedAtMs = 0;
+        _snapshotTimeoutLogged = false;
+
+        ++_sessionCounter;
+        _model.beginPage(pageId, _sessionCounter);
+
+        next->_runtime = this;
+        next->_shown = false;
+        next->onPrepare();
+
+        _pendingNav = PendingNavigation{};
+        _pendingNav.active = true;
+        _pendingNav.pageId = pageId;
+        _pendingNav.sessionId = _sessionCounter;
+        _pendingNav.startedAtMs = nowMs();
+        _pendingNav.deadlineMs = _pendingNav.startedAtMs + kPrepareAckTimeoutMs;
+        _pendingNav.page = std::move(next);
+        _pendingNav.factory = nextFactory;
+        _pendingNav.dataBlockCount = _pendingNav.page->_pendingModel.slotCount() > 0 ? 1u : 0u;
+
+        _navState = RuntimeState::PreparingPage;
+        const uint32_t commitTimeoutMs = kDataAckTimeoutMs + kCommitAckTimeoutMs;
+        if (!sendPreparePageByMode(pageId,
+                                   _pendingNav.sessionId,
+                                   commitTimeoutMs,
+                                   _pendingNav.dataBlockCount != 0)) {
+            SCREENLIB_LOGW(kLogTag, "swapCurrent: PreparePage send failed pageId=%u session=%u",
+                           static_cast<unsigned>(pageId),
+                           static_cast<unsigned>(_pendingNav.sessionId));
+            abortPendingNavigation(PageTransitionError_PAGE_TRANSITION_ABORTED, false);
+            setLinkUp(false);
+            _navState = RuntimeState::LinkDown;
+            return false;
+        }
+
+        if (_current != nullptr && _current->_shown) {
+            _current->onClose();
+            _current->_shown = false;
+        }
+        setLinkUp(true);
+        return true;
+    }
 
     // 1. Дренаж: для простоты сейчас не ждём ACK'ов, а очищаем очередь.
     //    Бэк-оптимист: новая страница начнётся с PageSnapshot'а, который
@@ -608,6 +662,77 @@ void PageRuntime::checkSnapshotTimeout() {
     }
 }
 
+void PageRuntime::checkNavigationTimeout() {
+    if (!_pendingNav.active) {
+        return;
+    }
+    if (_navState != RuntimeState::PreparingPage &&
+        _navState != RuntimeState::WaitingDataAck &&
+        _navState != RuntimeState::WaitingCommitAck) {
+        return;
+    }
+    const uint32_t now = nowMs();
+    if (static_cast<int32_t>(now - _pendingNav.deadlineMs) <= 0) {
+        return;
+    }
+
+    SCREENLIB_LOGW(kLogTag,
+                   "page transaction timeout page=%u session=%u state=%u",
+                   static_cast<unsigned>(_pendingNav.pageId),
+                   static_cast<unsigned>(_pendingNav.sessionId),
+                   static_cast<unsigned>(_navState));
+    abortPendingNavigation(PageTransitionError_PAGE_TRANSITION_TIMEOUT, true);
+    setLinkUp(false);
+    _navState = RuntimeState::LinkDown;
+}
+
+void PageRuntime::abortPendingNavigation(PageTransitionError reason, bool notifyPeer) {
+    if (!_pendingNav.active) {
+        return;
+    }
+    const uint32_t pageId = _pendingNav.pageId;
+    const uint32_t sessionId = _pendingNav.sessionId;
+
+    if (notifyPeer && _pendingNav.prepared) {
+        sendAbortPreparedPageByMode(pageId, sessionId, reason);
+    }
+    if (_pendingNav.page != nullptr) {
+        _pendingNav.page->onAbort();
+    }
+    _pendingNav = PendingNavigation{};
+    _pendingCount = 0;
+    _queuedHead = 0;
+    _queuedCount = 0;
+    _queuedTextHead = 0;
+    _queuedTextCount = 0;
+}
+
+bool PageRuntime::sendPendingCommit() {
+    if (!_pendingNav.active || _pendingNav.committed) {
+        return false;
+    }
+    if (!sendCommitPageByMode(_pendingNav.pageId, _pendingNav.sessionId)) {
+        abortPendingNavigation(PageTransitionError_PAGE_TRANSITION_ABORTED, false);
+        setLinkUp(false);
+        _navState = RuntimeState::LinkDown;
+        return false;
+    }
+    _pendingNav.committed = true;
+    _pendingNav.deadlineMs = nowMs() + kCommitAckTimeoutMs;
+    _navState = RuntimeState::WaitingCommitAck;
+    return true;
+}
+
+void PageRuntime::maybeCommitPendingNavigation() {
+    if (!_pendingNav.active || _navState != RuntimeState::WaitingDataAck) {
+        return;
+    }
+    if (_pendingCount != 0 || _queuedCount != 0 || _queuedTextCount != 0) {
+        return;
+    }
+    sendPendingCommit();
+}
+
 void PageRuntime::checkPendingTimeouts() {
     if (_pendingCount == 0) return;
     const uint32_t now = nowMs();
@@ -675,6 +800,73 @@ bool PageRuntime::sendShowPageByMode(uint32_t pageId, uint32_t sessionId) {
             }
             if (_web != nullptr) {
                 any = _web->showPage(pageId, sessionId) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
+bool PageRuntime::sendPreparePageByMode(uint32_t pageId,
+                                        uint32_t sessionId,
+                                        uint32_t commitTimeoutMs,
+                                        bool hasInitialData) {
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr &&
+                   _physical->preparePage(pageId, sessionId, commitTimeoutMs, hasInitialData);
+        case MirrorMode::WebOnly:
+            return _web != nullptr &&
+                   _web->preparePage(pageId, sessionId, commitTimeoutMs, hasInitialData);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = _physical->preparePage(pageId, sessionId, commitTimeoutMs, hasInitialData) || any;
+            }
+            if (_web != nullptr) {
+                any = _web->preparePage(pageId, sessionId, commitTimeoutMs, hasInitialData) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
+bool PageRuntime::sendCommitPageByMode(uint32_t pageId, uint32_t sessionId) {
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr && _physical->commitPage(pageId, sessionId);
+        case MirrorMode::WebOnly:
+            return _web != nullptr && _web->commitPage(pageId, sessionId);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = _physical->commitPage(pageId, sessionId) || any;
+            }
+            if (_web != nullptr) {
+                any = _web->commitPage(pageId, sessionId) || any;
+            }
+            return any;
+        }
+    }
+    return false;
+}
+
+bool PageRuntime::sendAbortPreparedPageByMode(uint32_t pageId,
+                                             uint32_t sessionId,
+                                             PageTransitionError reason) {
+    switch (_mirrorMode) {
+        case MirrorMode::PhysicalOnly:
+            return _physical != nullptr && _physical->abortPreparedPage(pageId, sessionId, reason);
+        case MirrorMode::WebOnly:
+            return _web != nullptr && _web->abortPreparedPage(pageId, sessionId, reason);
+        case MirrorMode::Both: {
+            bool any = false;
+            if (_physical != nullptr) {
+                any = _physical->abortPreparedPage(pageId, sessionId, reason) || any;
+            }
+            if (_web != nullptr) {
+                any = _web->abortPreparedPage(pageId, sessionId, reason) || any;
             }
             return any;
         }
@@ -763,6 +955,7 @@ bool PageRuntime::sendTextChunkAbortByMode(const TextChunkAbort& abort) {
 }
 
 void PageRuntime::notifyDeviceInfo(const DeviceInfo& info) {
+    _deviceCapabilities = info.capabilities;
     if (_deviceInfoListener != nullptr) {
         _deviceInfoListener(info, _deviceInfoListenerUser);
     }
@@ -787,8 +980,112 @@ void PageRuntime::onEnvelope(const Envelope& env) {
             notifyDeviceInfo(env.payload.device_info);
             break;
 
+        case Envelope_page_prepared_tag: {
+            const PagePrepared& msg = env.payload.page_prepared;
+            if (!_pendingNav.active ||
+                msg.page_id != _pendingNav.pageId ||
+                msg.session_id != _pendingNav.sessionId ||
+                _navState != RuntimeState::PreparingPage) {
+                SCREENLIB_LOGD(kLogTag,
+                               "stale PagePrepared ignored: page=%u session=%u",
+                               static_cast<unsigned>(msg.page_id),
+                               static_cast<unsigned>(msg.session_id));
+                return;
+            }
+            if (!msg.ok) {
+                abortPendingNavigation(msg.error, false);
+                setLinkUp(false);
+                _navState = RuntimeState::LinkDown;
+                return;
+            }
+
+            _pendingNav.prepared = true;
+            _model.markReady();
+            if (_pendingNav.page != nullptr) {
+                _navState = RuntimeState::SendingInitialData;
+                _pendingNav.page->applyPendingAttributes();
+            }
+            if (_pendingCount != 0 || _queuedCount != 0 || _queuedTextCount != 0) {
+                _pendingNav.dataSent = true;
+                _pendingNav.deadlineMs = nowMs() + kDataAckTimeoutMs;
+                _navState = RuntimeState::WaitingDataAck;
+            } else {
+                sendPendingCommit();
+            }
+            break;
+        }
+
+        case Envelope_page_data_applied_tag: {
+            const PageDataApplied& msg = env.payload.page_data_applied;
+            if (!_pendingNav.active ||
+                msg.page_id != _pendingNav.pageId ||
+                msg.session_id != _pendingNav.sessionId) {
+                return;
+            }
+            _pendingNav.dataAckCount++;
+            if (!msg.ok) {
+                _pendingNav.failedDataCount++;
+                abortPendingNavigation(msg.error, true);
+                setLinkUp(false);
+                _navState = RuntimeState::LinkDown;
+            }
+            break;
+        }
+
+        case Envelope_page_shown_tag: {
+            const PageShown& msg = env.payload.page_shown;
+            if (!_pendingNav.active ||
+                msg.page_id != _pendingNav.pageId ||
+                msg.session_id != _pendingNav.sessionId ||
+                _navState != RuntimeState::WaitingCommitAck) {
+                SCREENLIB_LOGD(kLogTag,
+                               "stale PageShown ignored: page=%u session=%u",
+                               static_cast<unsigned>(msg.page_id),
+                               static_cast<unsigned>(msg.session_id));
+                return;
+            }
+            if (!msg.ok) {
+                abortPendingNavigation(msg.error, false);
+                setLinkUp(false);
+                _navState = RuntimeState::LinkDown;
+                return;
+            }
+
+            _previousFactory = _currentFactory;
+            _currentFactory = _pendingNav.factory;
+            _current = std::move(_pendingNav.page);
+            if (_current != nullptr) {
+                _current->_runtime = this;
+                _current->onShow();
+                _current->_shown = true;
+            }
+            _pendingNav = PendingNavigation{};
+            _snapshotTimeoutLogged = false;
+            _navState = RuntimeState::PageReady;
+            setLinkUp(true);
+            break;
+        }
+
+        case Envelope_page_transaction_timeout_tag: {
+            const PageTransactionTimeout& msg = env.payload.page_transaction_timeout;
+            if (_pendingNav.active &&
+                msg.page_id == _pendingNav.pageId &&
+                msg.session_id == _pendingNav.sessionId) {
+                abortPendingNavigation(PageTransitionError_PAGE_TRANSITION_TIMEOUT, false);
+                _navState = RuntimeState::LinkDown;
+            }
+            break;
+        }
+
         case Envelope_page_snapshot_tag: {
             const PageSnapshot& snap = env.payload.page_snapshot;
+            if (_pendingNav.active) {
+                SCREENLIB_LOGD(kLogTag,
+                               "snapshot during transaction ignored: page=%u session=%u",
+                               static_cast<unsigned>(snap.page_id),
+                               static_cast<unsigned>(snap.session_id));
+                return;
+            }
             // Отбрасываем snapshot от устаревшей эпохи/страницы.
             if (snap.session_id != _model.sessionId() || snap.page_id != _model.pageId()) {
                 SCREENLIB_LOGD(kLogTag,

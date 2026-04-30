@@ -51,6 +51,10 @@ public:
         NoPage,
         WaitingSnapshot,
         PageReady,
+        PreparingPage,
+        SendingInitialData,
+        WaitingDataAck,
+        WaitingCommitAck,
         LinkDown
     };
 
@@ -63,6 +67,9 @@ public:
     // Таймаут ожидания ACK на самую старую команду в очереди.
     static constexpr uint32_t kLinkTimeoutMs = 2000;
     static constexpr uint32_t kSnapshotTimeoutMs = 2000;
+    static constexpr uint32_t kPrepareAckTimeoutMs = 1000;
+    static constexpr uint32_t kDataAckTimeoutMs = 2000;
+    static constexpr uint32_t kCommitAckTimeoutMs = 1000;
 
     PageRuntime() = default;
     PageRuntime(const PageRuntime&) = delete;
@@ -108,7 +115,11 @@ public:
 
     bool linkUp() const { return _linkUp; }
     bool pageSynced() const {
-        return _model.isReady() && _pendingCount == 0 && _queuedCount == 0 && _queuedTextCount == 0;
+        return _navState == RuntimeState::PageReady &&
+               _model.isReady() &&
+               _pendingCount == 0 &&
+               _queuedCount == 0 &&
+               _queuedTextCount == 0;
     }
     std::size_t pendingCommands() const { return _pendingCount + _queuedCount + _queuedTextCount; }
     RuntimeState runtimeState() const { return _navState; }
@@ -166,6 +177,14 @@ private:
     void onEnvelope(const Envelope& env);
 
     bool sendShowPageByMode(uint32_t pageId, uint32_t sessionId);
+    bool sendPreparePageByMode(uint32_t pageId,
+                               uint32_t sessionId,
+                               uint32_t commitTimeoutMs,
+                               bool hasInitialData);
+    bool sendCommitPageByMode(uint32_t pageId, uint32_t sessionId);
+    bool sendAbortPreparedPageByMode(uint32_t pageId,
+                                     uint32_t sessionId,
+                                     PageTransitionError reason);
     bool sendSetElementAttributeByMode(const SetElementAttribute& cmd);
     bool sendTextChunksByMode(TextChunkKind kind,
                               uint32_t transferId,
@@ -192,9 +211,16 @@ private:
     // Проверка таймаута на голове очереди. Вызывается из tick.
     void checkPendingTimeouts();
     void checkSnapshotTimeout();
+    void checkNavigationTimeout();
+    void abortPendingNavigation(PageTransitionError reason, bool notifyPeer);
+    bool sendPendingCommit();
+    void maybeCommitPendingNavigation();
 
     // Пометить линк как up/down, позвать listener при изменении.
     void setLinkUp(bool up);
+    bool usePageTransactions() const {
+        return (_deviceCapabilities & SCREENLIB_CAP_PAGE_TRANSACTION) != 0;
+    }
 
     // Удалить pending по request_id (линейный поиск). true если нашёл.
     bool removePending(RequestId id);
@@ -217,6 +243,23 @@ private:
     RuntimeState _navState = RuntimeState::NoPage;
     uint32_t _snapshotRequestedAtMs = 0;
     bool _snapshotTimeoutLogged = false;
+    uint32_t _deviceCapabilities = 0;
+
+    struct PendingNavigation {
+        bool active = false;
+        uint32_t pageId = 0;
+        uint32_t sessionId = 0;
+        uint32_t startedAtMs = 0;
+        uint32_t deadlineMs = 0;
+        std::unique_ptr<IPage> page;
+        PageFactory factory = nullptr;
+        uint32_t dataBlockCount = 0;
+        uint32_t dataAckCount = 0;
+        uint32_t failedDataCount = 0;
+        bool prepared = false;
+        bool dataSent = false;
+        bool committed = false;
+    } _pendingNav;
 
     bool _linkUp = true;
     LinkListener _linkListener = nullptr;
@@ -289,7 +332,9 @@ public:
     void writeStringProperty(uint32_t elementId, ElementAttribute attribute, const char* value);
 
 protected:
+    virtual void onPrepare() {}
     virtual void onShow() {}
+    virtual void onAbort() {}
     virtual void onClose() {}
     virtual void onTick() {}
 

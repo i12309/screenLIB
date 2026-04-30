@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define SCREENLIB_CAP_PAGE_TRANSACTION (1u << 0)
+
 namespace screenlib {
 
 // Тип выхода для конкретного endpoint.
